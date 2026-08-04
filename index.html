@@ -942,7 +942,34 @@ window.saveHabitVal=function(hid){
 };
 window.toggleEventDone=function(eid){
   const e=DB.schedule.events.find(x=>x.id===eid);if(!e)return;
-  e.done=!e.done;saveData();renderToday();renderPage('schedule');
+  e.done=!e.done;saveData();closeSheet();renderToday();renderPage('schedule');
+};
+window.openEventDetail=function(eid){
+  const e=DB.schedule.events.find(x=>x.id===eid);if(!e)return;
+  openSheet('日程详情',`
+    <div style="text-align:center;padding:6px 0 16px">
+      <div style="font-family:var(--serif);font-size:20px">${escapeHTML(e.title)}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:8px">${e.date}${e.time?' '+e.time:''} · ${e.category}</div>
+      ${e.note?`<div style="font-size:13px;color:var(--ink-2);margin-top:12px;padding:8px 12px;background:var(--bg);border-radius:6px;text-align:left">${escapeHTML(e.note)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="toggleEventDone('${e.id}')">${e.done?'标记未完成':'标记完成'}</button>
+      <button class="btn clay sm" style="flex:1" onclick="delEvent('${e.id}')">删除</button>
+    </div>
+  `);
+};
+window.delEvent=function(eid){
+  confirmModal({
+    title:'删除日程',
+    body:'删除这条日程？此操作不可恢复。',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.schedule.events=DB.schedule.events.filter(x=>x.id!==eid);
+      if(DB.meta.eventNotified)delete DB.meta.eventNotified[eid];
+      saveData();closeSheet();renderSchedule();renderToday();toast('已删除',1000);
+    }
+  });
 };
 window.go=go;
 
@@ -1330,7 +1357,7 @@ function renderHabit(){
         }
         return `<div class="habit-item">
           <div class="hi-top">
-            <div class="hi-name"><span class="pd" style="background:${h.color}"></span>${escapeHTML(h.name)}</div>
+            <div class="hi-name" style="cursor:pointer" onclick="openHabitEdit('${h.id}')"><span class="pd" style="background:${h.color}"></span>${escapeHTML(h.name)}</div>
             <button class="icon-btn" onclick="delHabit('${h.id}')" style="width:28px;height:28px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
           <div class="hi-type">${h.type==='check'?'勾选':h.type==='count'?'计数':'数值'} · 连续 ${streak} 天</div>
@@ -1374,6 +1401,43 @@ window.openHabitSheet=function(){
       window._hColor=el.dataset.c;
     }));
   });
+};
+window.openHabitEdit=function(id){
+  const h=DB.habits.items.find(x=>x.id===id);if(!h)return;
+  const colors=['#3F5340','#5A7A86','#B89254','#B5604A','#8A6E9E','#6E8A5F'];
+  openSheet('编辑习惯',`
+    <div class="field"><label>名称</label><input type="text" id="hName" value="${escapeHTML(h.name)}"></div>
+    <div class="field"><label>打卡方式</label><select id="hType" onchange="toggleHabitTarget()">
+      <option value="check" ${h.type==='check'?'selected':''}>勾选（完成/未完成）</option>
+      <option value="count" ${h.type==='count'?'selected':''}>计数（如喝水 8 杯）</option>
+      <option value="value" ${h.type==='value'?'selected':''}>数值（如步数）</option>
+    </select></div>
+    <div class="field" id="targetField" style="display:${h.type==='check'?'none':'block'}"><label>目标值</label><input type="number" id="hTarget" value="${h.target}" min="1"></div>
+    <div class="field" id="unitField" style="display:${h.type==='value'?'block':'none'}"><label>单位（数值型可选）</label><input type="text" id="hUnit" value="${escapeHTML(h.unit||'')}" placeholder="如：步、分钟"></div>
+    <div class="field"><label>颜色</label><div id="colorPick" style="display:flex;gap:8px">
+      ${colors.map(c=>`<div class="cp ${c===h.color?'on':''}" data-c="${c}" style="width:30px;height:30px;border-radius:50%;background:${c};${c===h.color?'box-shadow:0 0 0 2px var(--bg),0 0 0 4px '+c:''}"></div>`).join('')}
+    </div></div>
+    <button class="btn moss block" onclick="saveEditHabit('${id}')">保存修改</button>
+  `,()=>{
+    window._hColor=h.color;
+    $$('.cp').forEach(el=>el.addEventListener('click',()=>{
+      $$('.cp').forEach(x=>x.style.boxShadow='none');
+      el.style.boxShadow=`0 0 0 2px var(--bg),0 0 0 4px ${el.dataset.c}`;
+      window._hColor=el.dataset.c;
+    }));
+  });
+};
+window.saveEditHabit=function(id){
+  const h=DB.habits.items.find(x=>x.id===id);if(!h)return;
+  const name=$('#hName').value.trim();
+  if(!name){toast('请输入名称',1500);return;}
+  const type=$('#hType').value;
+  h.name=name;
+  h.type=type;
+  h.target=type==='check'?1:(parseInt($('#hTarget').value)||1);
+  h.unit=type==='value'?($('#hUnit').value||''):'';
+  h.color=window._hColor||h.color;
+  saveData();closeSheet();renderHabit();toast('已更新',1000);
 };
 window.toggleHabitTarget=function(){
   const t=$('#hType').value;
@@ -1682,7 +1746,7 @@ function renderSchedule(){
       <div class="section-head"><h2>${dStr}的安排</h2><span class="more" onclick="openEventSheet('${schedCurDate}')">＋ 添加</span></div>
       <div class="card">
         ${dayEvents.length?`<ul class="mini-list" style="list-style:none">
-          ${dayEvents.map(e=>`<li class="sched-item">
+          ${dayEvents.map(e=>`<li class="sched-item" style="cursor:pointer" onclick="openEventDetail('${e.id}')">
             <div class="time">${e.time||'全天'}${e.time?`<div class="t2">${e.category}</div>`:''}</div>
             <div class="si-body"><div class="t ${e.done?'done':''}">${escapeHTML(e.title)}</div>${e.note?`<div class="cat">${escapeHTML(e.note)}</div>`:''}${!e.time?`<div class="cat">${e.category}</div>`:''}</div>
             <button class="icon-btn" onclick="toggleEventDone('${e.id}')" style="width:32px;height:32px"><div class="chk ${e.done?'on':''}">${e.done?'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':''}</div></button>
@@ -1740,11 +1804,12 @@ function renderShopping(){
           <button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk"></div></button>
           <div class="info"><div class="n">${escapeHTML(s.name)}</div><div class="sub">${s.category||'未分类'} · ${s.qty||1}件</div></div>
           <div class="price">¥${fmtMoney((s.price||0)*(s.qty||1))}</div>
+          <button class="icon-btn" onclick="delShopItem('${s.id}')" style="width:26px;height:26px;color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>`).join(''):'<div class="empty-state" style="padding:24px"><div class="t">都买齐了</div></div>'}
       </div>
     </div>
     ${done.length?`<div class="section"><div class="section-head"><h2>已购</h2><span class="more" onclick="clearBought()">清空</span></div><div class="card list-fade">
-      ${done.map(s=>`<div class="shop-item"><button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div></button><div class="info"><div class="n done">${escapeHTML(s.name)}</div><div class="sub">${s.category||''} · ${s.qty||1}件${s.boughtAt?` · 购于 ${s.boughtAt}`:''}</div></div><div class="price">¥${fmtMoney((s.price||0)*(s.qty||1))}</div></div>`).join('')}
+      ${done.map(s=>`<div class="shop-item"><button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div></button><div class="info"><div class="n done">${escapeHTML(s.name)}</div><div class="sub">${s.category||''} · ${s.qty||1}件${s.boughtAt?` · 购于 ${s.boughtAt}`:''}</div></div><div class="price">¥${fmtMoney((s.price||0)*(s.qty||1))}</div><button class="icon-btn" onclick="delShopItem('${s.id}')" style="width:26px;height:26px;color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>`).join('')}
     </div></div>`:''}
   `;
 }
@@ -1764,6 +1829,18 @@ window.clearBought=function(){
     onConfirm:()=>{
       DB.shopping.items=DB.shopping.items.filter(s=>!s.bought);
       saveData();renderShopping();toast('已清空',1000);
+    }
+  });
+};
+window.delShopItem=function(id){
+  confirmModal({
+    title:'删除物品',
+    body:'从清单中删除该物品？',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.shopping.items=DB.shopping.items.filter(x=>x.id!==id);
+      saveData();renderShopping();renderToday();toast('已删除',1000);
     }
   });
 };
@@ -2047,6 +2124,7 @@ function renderAbout(){
 
 // 版本历史（新增于此）
 const APP_HISTORY=[
+  {ver:'1.2', date:'2026-08-05', title:'补齐编辑与删除能力', notes:'习惯可编辑（名称/类型/目标/颜色）；日程点击可查看详情并删除；待买清单每项可单独删除（未买/已购均支持）。'},
   {ver:'1.1', date:'2026-08-05', title:'修复：连续打卡与备份', notes:'连续打卡天数修复（今天未打卡不再断档）；导出备份后立即刷新上次备份时间；备份文件固定 qixi-backup.json，最新备份覆盖历史备份。'},
   {ver:'1.0', date:'2026-08-05', title:'栖 · 生活工作台', notes:'一个安静的多功能生活工作台，集成记账、习惯、健身、日程、待买模块，记录生活的每一天。'}
 ];
