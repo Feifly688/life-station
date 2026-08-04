@@ -1,0 +1,24 @@
+# 构建工具（本地环境，不推送）
+tools/
+
+# Android 构建产物与缓存
+QixiLife/build/
+QixiLife/app/build/
+QixiLife/.gradle/
+QixiLife/.idea/
+QixiLife/local.properties
+QixiLife/app/release/
+
+# 本地 APK 安装包
+*.apk
+
+# 构建日志
+build*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地私有目录与临时文件
+.workbuddy/
+_test_index.html

@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#F4F1EA">
+<title>栖 · 生活工作台</title>
+<style>
+/* ============ 设计系统 ============ */
+:root{
+  --bg:#F4F1EA;            /* 主背景 米白 */
+  --surface:#FBFAF6;       /* 卡片 */
+  --surface-2:#EFEADD;
+  --ink:#1C1B18;           /* 主文字 */
+  --ink-2:#5A574F;         /* 次文字 */
+  --ink-3:#9A958A;         /* 弱文字 */
+  --line:#E3DECF;          /* 分隔线 */
+  --line-2:#D8D2C0;
+  --moss:#3F5340;          /* 苔绿 正向 */
+  --moss-soft:#E4E9DF;
+  --clay:#B5604A;          /* 陶土 支出/警示 */
+  --clay-soft:#F0E0D8;
+  --gold:#B89254;          /* 暖金 高亮 */
+  --gold-soft:#F0E9D6;
+  --sky:#5A7A86;           /* 雾青 信息 */
+  --sky-soft:#DDE6E8;
+  --radius:6px;
+  --radius-lg:10px;
+  --shadow:0 1px 2px rgba(28,27,24,.04), 0 4px 16px rgba(28,27,24,.04);
+  --serif:'Georgia','Songti SC','Source Han Serif SC',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{
+  font-family:var(--sans);
+  background:var(--bg);
+  color:var(--ink);
+  font-size:15px;
+  line-height:1.55;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+input,textarea,select{font-family:inherit;font-size:inherit;color:inherit;background:none;border:none;outline:none;}
+input::placeholder,textarea::placeholder{color:var(--ink-3);}
+ul{list-style:none;}
+
+/* ============ 应用框架 ============ */
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:520px;margin:0 auto;position:relative;background:var(--bg);}
+.app-header{
+  flex-shrink:0;padding:14px 20px 10px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg);
+  padding-top:max(14px,env(safe-area-inset-top));
+}
+.app-header .title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:.5px;}
+.hdr-back{display:inline-block;margin-right:10px;font-size:20px;color:var(--ink-2);cursor:pointer;vertical-align:1px;}
+.hdr-back:active{opacity:.5;}
+.app-header .title small{font-family:var(--sans);font-size:11px;color:var(--ink-3);letter-spacing:2px;display:block;margin-top:-2px;}
+.app-header .actions{display:flex;gap:6px;}
+.icon-btn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-2);}
+.icon-btn:active{background:var(--surface-2);}
+.icon-btn svg{width:20px;height:20px;}
+
+.main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative;}
+.page{display:none;padding:8px 20px 100px;animation:fade .3s ease;}
+.page.active{display:block;}
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+
+.tabbar{
+  flex-shrink:0;display:flex;background:var(--surface);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+  position:relative;z-index:5;
+}
+.tab{flex:1;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--ink-3);font-size:10px;letter-spacing:1px;transition:color .2s;}
+.tab svg{width:21px;height:21px;stroke-width:1.6;}
+.tab.active{color:var(--ink);}
+.tab.active svg{stroke:var(--moss);}
+
+/* ============ 通用组件 ============ */
+.section{margin-bottom:24px;}
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;padding:0 2px;}
+.section-head h2{font-family:var(--serif);font-size:17px;font-weight:400;}
+.section-head .more{font-size:12px;color:var(--ink-3);}
+.section-head .more:active{color:var(--moss);}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow);}
+.divider{height:1px;background:var(--line);margin:14px 0;border:none;}
+
+.btn{padding:10px 18px;border-radius:var(--radius);font-size:14px;background:var(--ink);color:var(--bg);display:inline-flex;align-items:center;gap:6px;justify-content:center;}
+.btn:active{opacity:.85;}
+.btn.ghost{background:transparent;border:1px solid var(--line-2);color:var(--ink-2);}
+.btn.moss{background:var(--moss);color:#fff;}
+.btn.clay{background:var(--clay);color:#fff;}
+.btn.sm{padding:6px 12px;font-size:12px;}
+.btn.block{display:flex;width:100%;}
+
+.tag{display:inline-flex;align-items:center;font-size:11px;padding:2px 8px;border-radius:3px;background:var(--surface-2);color:var(--ink-2);letter-spacing:.5px;}
+.tag.moss{background:var(--moss-soft);color:var(--moss);}
+.tag.clay{background:var(--clay-soft);color:var(--clay);}
+.tag.gold{background:var(--gold-soft);color:var(--gold);}
+.tag.sky{background:var(--sky-soft);color:var(--sky);}
+
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--ink-3);margin-bottom:6px;letter-spacing:1px;}
+.field input,.field textarea,.field select{
+  width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius);font-size:14px;
+}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--moss);}
+
+/* 底部弹出层 */
+.sheet-mask{position:fixed;inset:0;background:rgba(28,27,24,.4);z-index:50;display:none;}
+.sheet-mask.show{display:block;}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:51;
+  background:var(--surface);border-radius:18px 18px 0 0;
+  max-width:520px;margin:0 auto;
+  max-height:85vh;overflow-y:auto;
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+.sheet.show{transform:translateY(0);}
+.sheet-grip{width:36px;height:4px;background:var(--line-2);border-radius:2px;margin:10px auto 0;}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 6px;}
+.sheet-head h3{font-family:var(--serif);font-size:17px;font-weight:400;}
+
+/* ============ 自定义模态确认框 ============ */
+.modal-backdrop{
+  position:fixed;inset:0;background:rgba(28,27,24,.42);
+  display:flex;align-items:center;justify-content:center;
+  z-index:200;opacity:0;transition:opacity .2s ease;
+  padding:20px;
+}
+.modal-backdrop.show{opacity:1;}
+.modal-card{
+  background:var(--bg);border-radius:var(--radius-lg);
+  width:100%;max-width:320px;padding:22px 22px 16px;
+  box-shadow:0 10px 40px rgba(28,27,24,.18),0 2px 8px rgba(28,27,24,.08);
+  transform:scale(.96);transition:transform .2s ease;
+}
+.modal-backdrop.show .modal-card{transform:scale(1);}
+.modal-title{
+  font-family:var(--serif);font-size:18px;font-weight:400;
+  color:var(--ink);margin-bottom:10px;letter-spacing:.5px;
+}
+.modal-body{
+  font-size:13px;color:var(--ink-2);line-height:1.85;
+  margin-bottom:18px;
+}
+.modal-actions{display:flex;gap:10px;}
+.modal-actions .btn{flex:1;padding:11px 0;font-size:13px;}
+.sheet-body{padding:6px 20px 24px;}
+
+/* toast */
+#toast{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(28,27,24,.92);color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s;max-width:80%;text-align:center;}
+#toast.show{opacity:1;}
+
+/* ============ 今日页 ============ */
+.day-hero{padding:20px 4px 8px;}
+.day-hero .greet{font-family:var(--serif);font-size:26px;font-weight:400;line-height:1.3;}
+.day-hero .greet em{font-style:normal;color:var(--moss);}
+.day-hero .meta{font-size:12px;color:var(--ink-3);letter-spacing:1px;margin-top:6px;}
+.day-hero .meta b{color:var(--ink-2);font-weight:500;}
+
+.life-index{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;margin:18px 0;}
+.life-index .li{background:var(--surface);padding:14px 8px;text-align:center;}
+.life-index .li .ico{width:22px;height:22px;margin:0 auto 6px;color:var(--moss);}
+.life-index .li .v{font-family:var(--serif);font-size:18px;}
+.life-index .li .l{font-size:10px;color:var(--ink-3);letter-spacing:1px;margin-top:2px;}
+
+.mood-row{display:flex;gap:8px;justify-content:space-between;margin-top:4px;}
+.mood-row .m{flex:1;text-align:center;padding:10px 0;border:1px solid var(--line);border-radius:var(--radius);font-size:20px;background:var(--surface);}
+.mood-row .m:active,.mood-row .m.on{background:var(--moss-soft);border-color:var(--moss);}
+
+.today-block{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:12px;}
+.today-block .tb-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.today-block .tb-head .t{font-family:var(--serif);font-size:15px;}
+.today-block .tb-head .c{font-size:12px;color:var(--ink-3);}
+.mini-list li{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);}
+.mini-list li:last-child{border-bottom:none;}
+.mini-list .dot{width:6px;height:6px;border-radius:50%;background:var(--moss);flex-shrink:0;}
+.mini-list .dot.clay{background:var(--clay);}
+.mini-list .dot.gold{background:var(--gold);}
+.mini-list .txt{flex:1;font-size:13px;}
+.mini-list .sub{font-size:11px;color:var(--ink-3);}
+.mini-list .empty{padding:18px 0;text-align:center;color:var(--ink-3);font-size:13px;}
+.chk{width:20px;height:20px;border:1.5px solid var(--line-2);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.chk.on{background:var(--moss);border-color:var(--moss);}
+.chk.on svg{width:12px;height:12px;color:#fff;}
+.quick-add{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.quick-add .q{flex:1;min-width:120px;padding:10px;border:1px dashed var(--line-2);border-radius:var(--radius);font-size:12px;color:var(--ink-2);text-align:center;background:var(--bg);}
+.quick-add .q:active{border-color:var(--moss);color:var(--moss);}
+
+/* ============ 账本 ============ */
+.acc-overview{padding:18px 4px;}
+.acc-overview .bal{font-family:var(--serif);font-size:32px;font-weight:400;letter-spacing:-.5px;}
+.acc-overview .bal .sym{font-size:15px;color:var(--ink-3);margin-right:4px;}
+.acc-overview .bal .neg{color:var(--clay);}
+.acc-overview .sub{font-size:12px;color:var(--ink-3);margin-top:4px;letter-spacing:.5px;}
+.acc-overview .sub b{color:var(--moss);font-weight:500;}
+.acc-overview .sub b.less{color:var(--clay);}
+.acc-tabs{display:flex;gap:0;margin:16px 0 12px;border-bottom:1px solid var(--line);}
+.acc-tabs .t{padding:8px 14px;font-size:13px;color:var(--ink-3);position:relative;}
+.acc-tabs .t.on{color:var(--ink);}
+.acc-tabs .t.on:after{content:'';position:absolute;left:14px;right:14px;bottom:-1px;height:2px;background:var(--moss);}
+
+.budget-bar{margin:6px 0 4px;}
+.budget-bar .bb-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;}
+.budget-bar .bb-track{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;}
+.budget-bar .bb-fill{height:100%;background:var(--moss);border-radius:3px;transition:width .4s;}
+.budget-bar .bb-fill.warn{background:var(--gold);}
+.budget-bar .bb-fill.over{background:var(--clay);}
+
+.struct-chart{display:flex;align-items:center;gap:16px;padding:10px 0;}
+.struct-chart svg{flex-shrink:0;}
+.struct-legend{flex:1;font-size:12px;}
+.struct-legend .sl{display:flex;align-items:center;justify-content:space-between;padding:4px 0;}
+.struct-legend .sl .lf{display:flex;align-items:center;gap:6px;}
+.struct-legend .sw{width:9px;height:9px;border-radius:2px;}
+
+.tx-list li{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer;}
+.tx-list li:active{background:var(--surface-2);}
+.tx-list li:last-child{border-bottom:none;}
+.tx-list .cat-ico{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:15px;flex-shrink:0;}
+.tx-list .info{flex:1;}
+.tx-list .info .n{font-size:14px;}
+.tx-list .info .d{font-size:11px;color:var(--ink-3);margin-top:1px;}
+.tx-list .amt{font-family:var(--serif);font-size:15px;}
+.tx-list .amt.in{color:var(--moss);}
+.tx-list .amt.out{color:var(--ink);}
+
+/* 明细按日分组 */
+.tx-day{padding:10px 0 2px;}
+.tx-day + .tx-day{border-top:1px solid var(--line);}
+.tx-day-head{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--ink-2);margin:4px 0 0;}
+.tx-day-head .tx-day-sum{font-size:11px;color:var(--ink-3);}
+.tx-day-sum b{font-family:var(--serif);font-weight:400;}
+.tx-day-sum b.in{color:var(--moss);}
+.tx-day .tx-list li:last-child{border-bottom:none;}
+
+/* 明细搜索框 */
+.search-bar{margin:10px 0 2px;}
+.search-bar input{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);font-size:13px;color:var(--ink);}
+.search-bar input:focus{outline:none;border-color:var(--moss);}
+
+.filter-chips{display:flex;gap:6px;overflow-x:auto;padding:6px 0 12px;-webkit-overflow-scrolling:touch;}
+.filter-chips::-webkit-scrollbar{display:none;}
+.filter-chips .chip{flex-shrink:0;padding:5px 12px;border:1px solid var(--line);border-radius:14px;font-size:12px;color:var(--ink-2);background:var(--surface);}
+.filter-chips .chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+
+.month-pick{display:flex;align-items:center;justify-content:center;gap:16px;padding:6px 0 14px;}
+.month-pick .arrow{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-3);}
+.month-pick .arrow:active{background:var(--surface-2);}
+.month-pick .m{font-family:var(--serif);font-size:17px;}
+
+/* ============ 习惯 ============ */
+.habit-item{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px;}
+.habit-item .hi-top{display:flex;align-items:center;justify-content:space-between;}
+.habit-item .hi-name{font-size:15px;display:flex;align-items:center;gap:8px;}
+.habit-item .hi-name .pd{width:8px;height:8px;border-radius:50%;}
+.habit-item .hi-type{font-size:10px;color:var(--ink-3);letter-spacing:1px;}
+.habit-item .hi-mid{display:flex;align-items:center;justify-content:space-between;margin:10px 0;}
+.habit-item .hi-action{display:flex;align-items:center;gap:10px;}
+.habit-item .hi-action .v{font-family:var(--serif);font-size:20px;min-width:40px;text-align:center;}
+.habit-item .hbtn{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--line-2);display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--ink-2);}
+.habit-item .hbtn:active{border-color:var(--moss);color:var(--moss);}
+.habit-item .hbtn.done{background:var(--moss);border-color:var(--moss);color:#fff;}
+.heat{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin-top:10px;}
+.heat .h{aspect-ratio:1;border-radius:2px;background:var(--surface-2);}
+.heat .h.l1{background:#D8E0D2;}
+.heat .h.l2{background:#A8BC9E;}
+.heat .h.l3{background:#6E8A5F;}
+.heat .h.l4{background:var(--moss);}
+.heat-legend{display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:10px;color:var(--ink-3);margin-top:6px;}
+.heat-legend .lg{width:10px;height:10px;border-radius:2px;}
+
+/* ============ 健身 ============ */
+.fit-hero{text-align:center;padding:16px 0 8px;}
+.fit-hero .weight{font-family:var(--serif);font-size:40px;font-weight:400;letter-spacing:-1px;}
+.fit-hero .weight .u{font-size:14px;color:var(--ink-3);margin-left:4px;}
+.fit-hero .delta{font-size:12px;color:var(--ink-3);margin-top:4px;}
+.fit-hero .delta b{font-weight:500;}
+.fit-hero .delta b.down{color:var(--moss);}
+.fit-hero .delta b.up{color:var(--clay);}
+
+.fit-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0;}
+.fit-stats .fs{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 8px;text-align:center;}
+.fit-stats .fs .v{font-family:var(--serif);font-size:18px;}
+.fit-stats .fs .l{font-size:10px;color:var(--ink-3);letter-spacing:1px;margin-top:3px;}
+.fit-stats .fs .v.good{color:var(--moss);}
+.fit-stats .fs .v.warn{color:var(--clay);}
+
+.goal-progress{margin:16px 0;}
+.goal-progress .gp-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;}
+.goal-progress .gp-track{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;}
+.goal-progress .gp-fill{height:100%;background:linear-gradient(90deg,var(--moss),var(--gold));border-radius:4px;}
+
+.fit-chart{margin:14px 0;}
+.fit-chart svg{width:100%;height:auto;display:block;}
+
+.week-plan{margin-top:14px;}
+.week-plan .wp-day{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);}
+.week-plan .wp-day:last-child{border-bottom:none;}
+.week-plan .wp-d{width:28px;font-family:var(--serif);font-size:16px;color:var(--ink-2);text-align:center;}
+.week-plan .wp-d.on{color:var(--moss);}
+.week-plan .wp-c{flex:1;font-size:13px;color:var(--ink-2);}
+
+/* ============ 日程 ============ */
+.cal{margin:10px 0 16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:12px 10px 8px;}
+.cal .cal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding:0 4px;}
+.cal .cal-head .m{font-family:var(--serif);font-size:16px;}
+.cal .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;}
+.cal .cal-grid .wk{font-size:10px;color:var(--ink-3);text-align:center;padding:6px 0;}
+.cal .cal-grid .dc{text-align:center;padding:9px 0;font-size:13px;color:var(--ink-2);border-radius:8px;position:relative;cursor:pointer;}
+.cal .cal-grid .dc:active{background:var(--surface-2);}
+.cal .cal-grid .dc.today{box-shadow:inset 0 0 0 1.5px var(--ink);}
+.cal .cal-grid .dc.has:after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--clay);}
+.cal .cal-grid .dc.sel{background:var(--moss);color:#fff;}
+.cal .cal-grid .dc.sel.has:after{background:#fff;}
+.cal .cal-grid .dc.other{color:var(--line-2);}
+
+.sched-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+.sched-item:last-child{border-bottom:none;}
+.sched-item .time{font-family:var(--serif);font-size:13px;color:var(--ink-2);width:54px;flex-shrink:0;padding-top:1px;}
+.sched-item .time .t2{font-size:10px;color:var(--ink-3);}
+.sched-item .si-body{flex:1;}
+.sched-item .si-body .t{font-size:14px;}
+.sched-item .si-body .t.done{text-decoration:line-through;color:var(--ink-3);}
+.sched-item .si-body .cat{font-size:11px;color:var(--ink-3);margin-top:2px;}
+
+/* ============ 待买 ============ */
+.shop-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+.shop-item:last-child{border-bottom:none;}
+.shop-item .info{flex:1;}
+.shop-item .info .n{font-size:14px;}
+.shop-item .info .n.done{color:var(--ink-3);text-decoration:line-through;}
+.shop-item .info .sub{font-size:11px;color:var(--ink-3);margin-top:1px;}
+.shop-item .price{font-family:var(--serif);font-size:13px;color:var(--ink-2);}
+
+/* ============ 收藏 ============ */
+.coll-tabs{display:flex;gap:16px;margin:10px 0 14px;}
+.coll-tabs .t{font-size:13px;color:var(--ink-3);padding:6px 0;position:relative;}
+.coll-tabs .t.on{color:var(--ink);}
+.coll-tabs .t.on:after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--moss);}
+
+.view-toggle{display:flex;gap:4px;margin-bottom:12px;}
+.view-toggle .vt{padding:4px 10px;font-size:11px;border:1px solid var(--line);border-radius:12px;color:var(--ink-3);}
+.view-toggle .vt.on{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+
+.wall{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.wall .wc{aspect-ratio:2/3;border-radius:6px;overflow:hidden;background:var(--surface-2);position:relative;display:flex;align-items:flex-end;}
+.wall .wc .cover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--ink-3);text-align:center;padding:8px;}
+.wall .wc .ov{position:relative;background:linear-gradient(transparent 40%,rgba(0,0,0,.7));color:#fff;padding:8px;font-size:11px;width:100%;}
+.wall .wc .ov .st{color:var(--gold);font-size:10px;}
+.wall .wc .cover-img{position:absolute;inset:0;background-size:cover;background-position:center;}
+
+.coll-list-item{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+.coll-list-item:last-child{border-bottom:none;}
+.coll-list-item .poster{width:48px;height:64px;border-radius:4px;background:var(--surface-2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:11px;color:var(--ink-3);overflow:hidden;}
+.coll-list-item .ci-body{flex:1;}
+.coll-list-item .ci-body .t{font-size:14px;}
+.coll-list-item .ci-body .a{font-size:11px;color:var(--ink-3);margin-top:1px;}
+.coll-list-item .ci-body .st{color:var(--gold);font-size:11px;margin-top:3px;letter-spacing:1px;}
+.coll-list-item .ci-body .nt{font-size:12px;color:var(--ink-2);margin-top:4px;line-height:1.4;}
+
+.stars{color:var(--gold);font-size:12px;letter-spacing:1px;}
+
+.year-stat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0;}
+.year-stat .ys{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 8px;text-align:center;}
+.year-stat .ys .v{font-family:var(--serif);font-size:22px;}
+.year-stat .ys .l{font-size:10px;color:var(--ink-3);letter-spacing:1px;margin-top:3px;}
+
+/* ============ 设置/备份 ============ */
+.set-item{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--line);}
+.set-item:first-child{border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+.set-item:last-child{border-bottom:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);}
+.set-item .s-l{font-size:14px;}
+.set-item .s-r{font-size:12px;color:var(--ink-3);}
+.set-item:active{background:var(--surface-2);}
+
+/* ============ 历史版本 ============ */
+.hist-intro{font-size:12px;color:var(--ink-3);line-height:1.7;padding:4px 4px 14px;}
+.hist-item{padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--line);}
+.hist-item:first-of-type{border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+.hist-item:last-of-type{border-bottom:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);}
+.hist-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+.hist-ver{font-family:var(--serif);font-size:16px;color:var(--ink);}
+.hist-date{font-size:11px;color:var(--ink-3);letter-spacing:.5px;}
+.hist-title{font-size:13px;color:var(--ink-2);margin-bottom:6px;}
+.hist-notes{font-size:12px;color:var(--ink-3);line-height:1.7;}
+
+.stat-banner{background:var(--ink);color:var(--bg);border-radius:var(--radius-lg);padding:16px;margin:14px 0;}
+.stat-banner .sb-l{font-size:11px;letter-spacing:2px;color:var(--ink-3);}
+.stat-banner .sb-v{font-family:var(--serif);font-size:24px;margin-top:4px;}
+.stat-banner .sb-v b{color:var(--gold);}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--ink-3);}
+.empty-state svg{width:48px;height:48px;margin-bottom:12px;opacity:.4;}
+.empty-state .t{font-family:var(--serif);font-size:15px;}
+.empty-state .s{font-size:12px;margin-top:4px;}
+
+/* 数字键盘样式 */
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-radius:var(--radius);overflow:hidden;margin-top:10px;}
+.numpad .nk{background:var(--surface);padding:14px 0;text-align:center;font-family:var(--serif);font-size:20px;}
+.numpad .nk:active{background:var(--surface-2);}
+.numpad .nk.op{color:var(--ink-3);}
+
+.fab{position:fixed;right:20px;bottom:80px;width:50px;height:50px;border-radius:50%;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(28,27,24,.2);z-index:10;}
+.fab:active{transform:scale(.94);}
+.fab svg{width:22px;height:22px;}
+
+.list-fade{opacity:.5;pointer-events:none;}
+
+@media(max-width:360px){
+  .page{padding:8px 14px 100px;}
+  .app-header{padding:14px 14px 10px;}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="app-header">
+    <div class="title" id="hdrTitle">栖<small>LIFE STATION</small></div>
+    <div class="actions">
+      <button class="icon-btn" id="btnSettings" title="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="main" id="main">
+    <!-- 今日 -->
+    <section class="page active" id="page-today"></section>
+    <!-- 账本 -->
+    <section class="page" id="page-account"></section>
+    <!-- 习惯 -->
+    <section class="page" id="page-habit"></section>
+    <!-- 健身 -->
+    <section class="page" id="page-fitness"></section>
+    <!-- 收藏 -->
+    <section class="page" id="page-collection"></section>
+    <!-- 子页面：日程 -->
+    <section class="page" id="page-schedule"></section>
+    <!-- 子页面：待买 -->
+    <section class="page" id="page-shopping"></section>
+    <!-- 子页面：设置 -->
+    <section class="page" id="page-settings"></section>
+    <!-- 子页面：关于 -->
+    <section class="page" id="page-about"></section>
+  </div>
+
+  <nav class="tabbar">
+    <button class="tab active" data-page="today">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+      今日
+    </button>
+    <button class="tab" data-page="account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg>
+      账本
+    </button>
+    <button class="tab" data-page="habit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      习惯
+    </button>
+    <button class="tab" data-page="fitness">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M2 9v6M22 9v6M6 12h12"/></svg>
+      身体
+    </button>
+  </nav>
+
+  <div class="sheet-mask" id="sheetMask"></div>
+  <div class="sheet" id="sheet"></div>
+  <div id="toast"></div>
+</div>
+
+<script>
+// 诊断：捕获并显示 JS 运行时错误（定位 WebView 内问题）
+window.addEventListener('error',function(e){
+  var d=document.createElement('div');
+  d.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;color:#b5604a;padding:16px;font-size:11px;z-index:99999;white-space:pre-wrap;overflow:auto;font-family:monospace;line-height:1.5;';
+  d.textContent='JS 运行错误：\n'+(e.message||'未知错误')+'\n\n文件: '+(e.filename||'')+'\n行: '+(e.lineno||'')+'\n\n堆栈:\n'+(e.error&&e.error.stack||'无堆栈');
+  document.body.appendChild(d);
+});
+window.addEventListener('unhandledrejection',function(e){
+  var d=document.createElement('div');
+  d.style.cssText='position:fixed;top:0;left:0;right:0;background:#b5604a;color:#fff;padding:12px;font-size:11px;z-index:99999;white-space:pre-wrap;';
+  d.textContent='Promise 错误: '+(e.reason&&(e.reason.message||e.reason)||'未知');
+  document.body.appendChild(d);
+});
+</script>
+<script>
+/* ========================================================
+   栖 · 生活工作台  —— 单文件应用
+   数据持久化：localStorage  / 备份：JSON 导出导入
+   ======================================================== */
+(function(){
+'use strict';
+
+/* ---------- 工具 ---------- */
+const $=s=>document.querySelector(s);
+const $$=s=>Array.from(document.querySelectorAll(s));
+const todayStr=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const nowTime=()=>{const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;};
+const fmtDT=iso=>{const d=new Date(iso);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;};
+const normTime=t=>{if(!t)return '';const p=t.split(':');if(p.length===1)return p[0].padStart(2,'0')+':00:00';if(p.length===2)return p[0].padStart(2,'0')+':'+p[1].padStart(2,'0')+':00';return p[0].padStart(2,'0')+':'+p[1].padStart(2,'0')+':'+(p[2]||'00').padStart(2,'0');};
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const fmtMoney=n=>{n=Math.round(n*100)/100;return n.toLocaleString('zh-CN',{minimumFractionDigits:0,maximumFractionDigits:2});};
+const parseDate=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);};
+const daysAgoStr=n=>{const d=new Date();d.setDate(d.getDate()-n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const monthStr=(d=new Date())=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const escapeHTML=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function toast(msg,ms=1800){
+  const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),ms);
+}
+
+// 分类展示常量（账本共用，避免重复定义）
+const CAT_EMOJI={'餐饮':'🍽','交通':'🚇','购物':'🛍','居家':'🏠','娱乐':'🎬','健康':'💊','工资':'💼','其他':'·'};
+const CAT_COLORS={'餐饮':'#B5604A','交通':'#5A7A86','购物':'#B89254','居家':'#3F5340','娱乐':'#8A6E9E','健康':'#6E8A5F','工资':'#9A958A','其他':'#9A958A'};
+const CAT_BG={'餐饮':'#F0E0D8','交通':'#DDE6E8','购物':'#F0E9D6','居家':'#E4E9DF','娱乐':'#E8E0EC','健康':'#DDE8D6','工资':'#E4E9DF','其他':'#EEE9DC'};
+
+// 全量记录数（多处共用）
+const countEntries=()=>
+  DB.accounts.transactions.length+DB.habits.items.length+Object.keys(DB.habits.logs).length+
+  DB.fitness.records.length+DB.schedule.events.length+DB.shopping.items.length+DB.collection.items.length;
+
+/* ---------- 数据层 ---------- */
+const STORAGE_KEY='qixi_life_data_v1';
+const SCHEMA_VERSION=1;
+
+// 存储：优先 Android 原生文件存储（APP 私有目录），浏览器/无桥环境降级 localStorage，最后内存兜底
+const _memStore={};
+function safeGetItem(k){
+  if(window.Android&&typeof window.Android.loadData==='function'){
+    try{const v=window.Android.loadData(k);if(v!=null)return v;}catch(e){}
+  }
+  try{return localStorage.getItem(k);}catch(e){return _memStore[k]||null;}
+}
+function safeSetItem(k,v){
+  if(window.Android&&typeof window.Android.saveData==='function'){
+    try{window.Android.saveData(k,v);return true;}catch(e){}
+  }
+  try{localStorage.setItem(k,v);return true;}catch(e){_memStore[k]=v;return false;}
+}
+
+function defaultData(){
+  return {
+    meta:{version:SCHEMA_VERSION,createdAt:Date.now(),lastBackup:null,backupReminderCount:0},
+    accounts:{
+      transactions:[],
+      budget:{monthly:5000,categories:{}}
+    },
+    habits:{items:[],logs:{}},
+    fitness:{records:[],goal:{targetWeight:60,height:1.70,startDate:daysAgoStr(30),startWeight:70,weeklyPlan:{1:'上肢训练',2:'有氧 30 分',3:'下肢训练',4:'休息',5:'核心 + 有氧',6:'长距离慢跑',7:'休息'}}},
+    schedule:{events:[]},
+    shopping:{items:[]},
+    collection:{items:[],view:'wall'},
+    lifeIndex:{moodLogs:{},notes:{}}
+  };
+}
+
+let DB=null;
+
+function loadData(){
+  try{
+    const raw=safeGetItem(STORAGE_KEY);
+    if(!raw){DB=defaultData();saveData(true);return DB;}
+    const parsed=JSON.parse(raw);
+    if(!parsed||typeof parsed!=='object'||!parsed.meta)throw new Error('数据格式异常');
+    // 简单迁移：补字段
+    const def=defaultData();
+    DB=deepMerge(def,parsed);
+    DB.meta.version=SCHEMA_VERSION;
+    return DB;
+  }catch(e){
+    console.error('数据加载失败',e);
+    // 数据损坏：尝试从备份恢复
+    const backup=safeGetItem(STORAGE_KEY+'_bak');
+    if(backup){
+      try{
+        const parsed=JSON.parse(backup);
+        if(parsed&&parsed.meta){
+          DB=deepMerge(defaultData(),parsed);
+          toast('检测到数据损坏，已从自动备份恢复',3000);
+          saveData(true);
+          return DB;
+        }
+      }catch(e2){}
+    }
+    // 无备份，提示用户
+    DB=defaultData();
+    toast('数据损坏且无备份，已重置为初始状态',3000);
+    saveData(true);
+    return DB;
+  }
+}
+
+function deepMerge(base,over){
+  if(Array.isArray(base))return over!==undefined?over:base;
+  if(typeof base==='object'&&base!==null){
+    const r={...base};
+    for(const k in over){
+      if(k in base&&typeof base[k]==='object'&&base[k]!==null&&!Array.isArray(base[k])&&typeof over[k]==='object'&&over[k]!==null){
+        r[k]=deepMerge(base[k],over[k]);
+      }else{
+        r[k]=over[k];
+      }
+    }
+    return r;
+  }
+  return over!==undefined?over:base;
+}
+
+function saveData(silent){
+  try{
+    const json=JSON.stringify(DB);
+    // 先写备份再写主数据
+    const prev=safeGetItem(STORAGE_KEY);
+    if(prev)safeSetItem(STORAGE_KEY+'_bak',prev);
+    safeSetItem(STORAGE_KEY,json);
+    if(!silent){
+      // 检查是否需要提醒备份
+      checkBackupReminder();
+    }
+    return true;
+  }catch(e){
+    console.error('保存失败',e);
+    toast('存储失败：可能空间已满，请导出备份后清理',3000);
+    return false;
+  }
+}
+
+function checkBackupReminder(){
+  const totalEntries=countEntries();
+  // 满 20 条新数据提醒一次（基于计数差）
+  if(!DB.meta.lastBackupCount)DB.meta.lastBackupCount=0;
+  const delta=totalEntries-(DB.meta.lastBackupCount||0);
+  if(delta>=20){
+    DB.meta.lastBackupCount=totalEntries;
+    saveData(true);
+    setTimeout(()=>{
+      confirmModal({
+        title:'建议备份',
+        body:'已新增较多数据，建议导出备份文件以防丢失。',
+        confirmText:'现在导出',
+        cancelText:'稍后',
+        onConfirm:()=>exportBackup()
+      });
+    },500);
+  }
+}
+
+function triggerDownload(filename, content, mime){
+  if(window.Android && typeof window.Android.exportFile==='function'){
+    try{window.Android.exportFile(filename, content, mime);return;}catch(e){}
+  }
+  const blob=new Blob([content],{type:mime});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportBackup(){
+  try{
+    const json=JSON.stringify(DB,null,2);
+    triggerDownload(`qixi-backup-${todayStr()}.json`, json, 'application/json');
+    DB.meta.lastBackup=new Date().toISOString();
+    DB.meta.lastBackupCount=countEntries();
+    saveData(true);
+    toast('备份已导出',1500);
+  }catch(e){toast('导出失败',1500);}
+}
+
+function importBackup(file){
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const parsed=JSON.parse(e.target.result);
+      if(!parsed.meta||!parsed.meta.version)throw new Error('无效备份');
+      confirmModal({
+        title:'导入备份',
+        body:'导入将覆盖当前所有数据，确定继续？',
+        confirmText:'导入',
+        danger:true,
+        onConfirm:()=>{
+          DB=deepMerge(defaultData(),parsed);
+          saveData(true);
+          renderAll();
+          toast('备份已恢复',1500);
+        }
+      });
+    }catch(err){
+      toast('备份文件无效或已损坏',2500);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 路由 ---------- */
+let currentPage='today';
+let navStack=['today'];
+const SUB_PAGES={schedule:1,shopping:1,settings:1,about:1};
+function go(page){
+  if(navStack[navStack.length-1]!==page)navStack.push(page);
+  showPage(page);
+}
+function showPage(page){
+  currentPage=page;
+  $$('.page').forEach(p=>p.classList.remove('active'));
+  $('#page-'+page).classList.add('active');
+  $$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.page===page));
+  // 头部标题（子页面显示返回箭头）
+  const titles={today:'栖',account:'账本',habit:'习惯',fitness:'身体',collection:'收藏',schedule:'日程',shopping:'待买',settings:'设置',about:'关于'};
+  const subs={today:'LIFE STATION',account:'LEDGER',habit:'HABITS',fitness:'BODY',collection:'ARCHIVE',schedule:'SCHEDULE',shopping:'SHOPPING',settings:'SETTINGS',about:'ABOUT'};
+  const showBack=SUB_PAGES[page]&&navStack.length>1;
+  $('#hdrTitle').innerHTML=`${showBack?'<span class="hdr-back" onclick="goBack()">‹</span>':''}${titles[page]||'栖'}<small>${subs[page]||'LIFE STATION'}</small>`;
+  // 渲染对应页
+  renderPage(page);
+  $('.main').scrollTop=0;
+  // tab 高亮：子页面归属
+  const tabMap={schedule:'today',shopping:'today',settings:'today',about:'today'};
+  if(tabMap[page]){
+    $$('.tab').forEach(t=>t.classList.toggle('active',t.dataset.page===tabMap[page]));
+  }
+}
+window.goBack=function(){
+  if(navStack.length<=1)return;
+  navStack.pop();
+  showPage(navStack[navStack.length-1]);
+};
+
+function renderPage(page){
+  switch(page){
+    case 'today':renderToday();break;
+    case 'account':renderAccount();break;
+    case 'habit':renderHabit();break;
+    case 'fitness':renderFitness();break;
+    case 'collection':renderCollection();break;
+    case 'schedule':renderSchedule();break;
+    case 'shopping':renderShopping();break;
+    case 'settings':renderSettings();break;
+    case 'about':renderAbout();break;
+  }
+}
+
+function renderAll(){['today','account','habit','fitness','collection','schedule','shopping','settings'].forEach(p=>{if($('#page-'+p).classList.contains('active'))renderPage(p);});}
+
+/* ---------- Sheet 弹层 ---------- */
+function openSheet(title,bodyHTML,onMount){
+  const sheet=$('#sheet');
+  sheet.innerHTML=`<div class="sheet-grip"></div><div class="sheet-head"><h3>${title}</h3><button class="icon-btn" onclick="closeSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="sheet-body">${bodyHTML}</div>`;
+  $('#sheetMask').classList.add('show');
+  requestAnimationFrame(()=>sheet.classList.add('show'));
+  if(onMount)onMount(sheet);
+}
+function closeSheet(){
+  $('#sheet').classList.remove('show');
+  $('#sheetMask').classList.remove('show');
+}
+window.closeSheet=closeSheet;
+$('#sheetMask').addEventListener('click',closeSheet);
+
+/* ========================================================
+   渲染：今日
+   ======================================================== */
+function renderToday(){
+  const t=todayStr();
+  const d=new Date();
+  const wd=['日','一','二','三','四','五','六'][d.getDay()];
+  const hour=d.getHours();
+  let greet='夜深了';
+  if(hour<6)greet='夜深了';else if(hour<11)greet='早安';else if(hour<13)greet='午安';else if(hour<18)greet='下午好';else if(hour<22)greet='晚上好';
+  const mood=DB.lifeIndex.moodLogs[t]||0;
+
+  // 今日日程
+  const todayEvents=DB.schedule.events.filter(e=>e.date===t).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  // 今日待买未买
+  const shopTodo=DB.shopping.items.filter(s=>!s.bought).slice(0,3);
+  // 今日习惯
+  const habitsToday=DB.habits.items.map(h=>{
+    const log=DB.habits.logs[h.id]||{};
+    const v=log[t]||0;
+    let done=false,progress=0;
+    if(h.type==='check')done=v>=1;
+    else if(h.type==='count'){done=v>=h.target;progress=Math.min(1,v/h.target);}
+    else{done=v>=h.target;progress=Math.min(1,v/h.target);}
+    return {h,done,progress,v};
+  });
+  const habitDone=habitsToday.filter(x=>x.done).length;
+
+  // 生活指数计算
+  const accMonth=DB.accounts.transactions.filter(x=>x.date.startsWith(monthStr()));
+  const expense=accMonth.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
+  const budget=DB.accounts.budget.monthly;
+  const budgetPct=budget?Math.round(expense/budget*100):0;
+  const dayOfMonth=d.getDate();
+  const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  const expectPct=Math.round(dayOfMonth/daysInMonth*100);
+
+  // 账本余额
+  const income=accMonth.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0);
+  const balance=income-expense;
+
+  // 健身最新
+  const lastFit=DB.fitness.records[DB.fitness.records.length-1];
+  const firstFit=DB.fitness.records[0];
+
+  const html=`
+    <div class="day-hero">
+      <div class="greet">${greet}，<em>Feiqi</em></div>
+      <div class="meta">${d.getMonth()+1}月${d.getDate()}日 · 周${wd} · 第${Math.ceil((d-new Date(d.getFullYear(),0,0))/86400000)}天</div>
+    </div>
+
+    <div class="life-index">
+      <div class="li">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="v">${budgetPct}%</div>
+        <div class="l">预算进度</div>
+      </div>
+      <div class="li">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M20 7L9 18l-5-5"/></svg>
+        <div class="v">${habitDone}/${habitsToday.length}</div>
+        <div class="l">今日习惯</div>
+      </div>
+      <div class="li">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <div class="v">${lastFit?lastFit.weight:('--')}</div>
+        <div class="l">体重 kg</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>今日心情</h2></div>
+      <div class="mood-row" id="moodRow">
+        ${['😣','😕','😐','🙂','😄'].map((e,i)=>`<div class="m ${mood===i+1?'on':''}" data-v="${i+1}">${e}</div>`).join('')}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>今日日程</h2><span class="more" onclick="go('schedule')">全部 ›</span></div>
+      <div class="today-block">
+        ${todayEvents.length?`<ul class="mini-list">
+          ${todayEvents.map(e=>`<li>
+            <span class="dot ${e.done?'':e.category==='健康'?'clay':e.category==='工作'?'gold':'moss'}" style="${e.done?'background:var(--line-2)':''}"></span>
+            <span class="txt ${e.done?'list-fade':''}">${escapeHTML(e.title)}${e.time?` <span class="sub">· ${e.time}</span>`:''}</span>
+            <button class="icon-btn" onclick="toggleEventDone('${e.id}')" style="width:28px;height:28px">
+              <div class="chk ${e.done?'on':''}">${e.done?'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':''}</div>
+            </button>
+          </li>`).join('')}
+        </ul>`:`<div class="empty">今天还没有安排</div>`}
+        <div class="quick-add">
+          <div class="q" onclick="openEventSheet()">＋ 添加日程</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>待买清单</h2><span class="more" onclick="go('shopping')">全部 ›</span></div>
+      <div class="today-block">
+        ${shopTodo.length?`<ul class="mini-list">
+          ${shopTodo.map(s=>`<li>
+            <span class="dot clay"></span>
+            <span class="txt">${escapeHTML(s.name)} <span class="sub">· ${s.category||'未分类'}</span></span>
+            <span class="sub">¥${fmtMoney(s.price||0)}</span>
+          </li>`).join('')}
+        </ul>`:`<div class="empty">清单是空的</div>`}
+        <div class="quick-add">
+          <div class="q" onclick="openShopSheet()">＋ 添加物品</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>今日习惯</h2><span class="more" onclick="go('habit')">全部 ›</span></div>
+      <div class="today-block">
+        ${habitsToday.length?`<ul class="mini-list">
+          ${habitsToday.map(x=>`<li>
+            <span class="dot" style="background:${x.done?'var(--moss)':x.h.color}"></span>
+            <span class="txt">${escapeHTML(x.h.name)} <span class="sub">· ${x.h.type==='count'?x.v+'/'+x.h.target:x.h.type==='value'?(x.v+(x.h.unit||'')):(x.done?'已完成':'未完成')}</span></span>
+            <button class="icon-btn" onclick="quickHabit('${x.h.id}')" style="width:28px;height:28px">
+              <div class="chk ${x.done?'on':''}">${x.done?'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':''}</div>
+            </button>
+          </li>`).join('')}
+        </ul>`:`<div class="empty">还没有创建习惯</div>`}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-head"><h2>本月概览</h2></div>
+      <div class="today-block">
+        <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-3);font-size:13px">本月支出</span><span style="font-family:var(--serif)">¥${fmtMoney(expense)}</span></div>
+        ${budget?`<div style="margin:2px 0 10px"><div style="height:5px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.min(100,budgetPct)}%;background:${budgetPct>100?'var(--clay)':budgetPct>80?'var(--gold)':'var(--moss)'};border-radius:3px;transition:width .4s"></div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);margin-top:3px"><span>剩余 ${budget-expense>=0?'¥'+fmtMoney(budget-expense):'超支 ¥'+fmtMoney(expense-budget)}</span><span>${budgetPct}%</span></div></div>`:''}
+        <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-3);font-size:13px">本月结余</span><span style="font-family:var(--serif);color:${balance>=0?'var(--moss)':'var(--clay)'}">${balance>=0?'+':''}¥${fmtMoney(balance)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0"><span style="color:var(--ink-3);font-size:13px">预算节律</span><span style="font-size:13px;color:${budgetPct>expectPct+10?'var(--clay)':'var(--moss)'}">${budgetPct>expectPct?'偏快':'平稳'} ${budgetPct}/${expectPct}%</span></div>
+        ${lastFit&&firstFit?`<div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px dashed var(--line);margin-top:4px"><span style="color:var(--ink-3);font-size:13px">体重变化</span><span style="font-family:var(--serif);color:${lastFit.weight<=firstFit.weight?'var(--moss)':'var(--clay)'}">${(lastFit.weight-firstFit.weight>=0?'+':'')}${(lastFit.weight-firstFit.weight).toFixed(1)} kg</span></div>`:''}
+      </div>
+    </div>
+  `;
+  $('#page-today').innerHTML=html;
+  // 心情绑定
+  $$('#moodRow .m').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const v=parseInt(el.dataset.v);
+      DB.lifeIndex.moodLogs[t]=(DB.lifeIndex.moodLogs[t]===v)?0:v;
+      saveData();renderToday();
+    });
+  });
+}
+window.quickHabit=function(hid){
+  const h=DB.habits.items.find(x=>x.id===hid);if(!h)return;
+  const log=DB.habits.logs[hid]||(DB.habits.logs[hid]={});
+  const cur=log[todayStr()]||0;
+  if(h.type==='check'){
+    log[todayStr()]=cur>=1?0:1;
+  }else if(h.type==='count'){
+    openSheet('打卡 - '+h.name,`
+      <div class="field"><label>当前数值</label><input type="number" id="habitVal" value="${cur}" min="0"></div>
+      <div style="display:flex;gap:8px"><button class="btn ghost sm" onclick="closeSheet()">取消</button><button class="btn moss sm" style="flex:1" onclick="saveHabitVal('${hid}')">保存</button></div>
+    `);
+    return;
+  }else{
+    openSheet('打卡 - '+h.name,`
+      <div class="field"><label>当前数值 (${h.unit||''})</label><input type="number" id="habitVal" value="${cur}" min="0"></div>
+      <div style="display:flex;gap:8px"><button class="btn ghost sm" onclick="closeSheet()">取消</button><button class="btn moss sm" style="flex:1" onclick="saveHabitVal('${hid}')">保存</button></div>
+    `);
+    return;
+  }
+  saveData();renderToday();renderPage('habit');
+};
+window.saveHabitVal=function(hid){
+  const v=parseFloat($('#habitVal').value)||0;
+  const log=DB.habits.logs[hid]||(DB.habits.logs[hid]={});
+  log[todayStr()]=v;
+  saveData();closeSheet();renderToday();renderPage('habit');
+  toast('已记录',1000);
+};
+window.toggleEventDone=function(eid){
+  const e=DB.schedule.events.find(x=>x.id===eid);if(!e)return;
+  e.done=!e.done;saveData();renderToday();renderPage('schedule');
+};
+window.go=go;
+
+/* ========================================================
+   渲染：账本
+   ======================================================== */
+let accTab='summary';
+let accFilter='all';
+let accCat='全部';
+let accMonthOffset=0;
+window.accSearch='';
+function renderAccount(){
+  const d=new Date();d.setMonth(d.getMonth()+accMonthOffset);
+  const mStr=monthStr(d);
+  const txs=DB.accounts.transactions.filter(x=>x.date.startsWith(mStr));
+  const income=txs.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0);
+  const expense=txs.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
+  const balance=income-expense;
+  const budget=DB.accounts.budget.monthly;
+  const budgetPct=budget?Math.round(expense/budget*100):0;
+
+  // 上月对比
+  const prevD=new Date(d);prevD.setMonth(prevD.getMonth()-1);
+  const prevStr=monthStr(prevD);
+  const prevExpense=DB.accounts.transactions.filter(x=>x.date.startsWith(prevStr)&&x.type==='expense').reduce((s,x)=>s+x.amount,0);
+  const mom=prevExpense?Math.round((expense-prevExpense)/prevExpense*100):0;
+
+  // 消费结构
+  const catMap={};
+  txs.filter(x=>x.type==='expense').forEach(x=>{catMap[x.category]=(catMap[x.category]||0)+x.amount;});
+  const cats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const totalExp=expense||1;
+  const donutSVG=renderDonut(cats.map(c=>({label:c[0],value:c[1],color:CAT_COLORS[c[0]]||'#9A958A'})),totalExp);
+
+  const html=`
+    <div class="acc-overview">
+      <div class="month-pick">
+        <div class="arrow" onclick="accPrev()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></div>
+        <div class="m">${d.getFullYear()}年${d.getMonth()+1}月</div>
+        <div class="arrow" onclick="accNext()" style="${accMonthOffset>=0?'pointer-events:none;opacity:.28;':''}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+      <div class="bal"><span class="sym">¥</span>${fmtMoney(Math.abs(balance))}${balance<0?'<span class="neg" style="font-size:14px;margin-left:6px">(透支)</span>':''}</div>
+      <div class="sub">结余 · 收 <b>¥${fmtMoney(income)}</b> / 支 <b class="${expense>budget?'less':''}">¥${fmtMoney(expense)}</b>${prevExpense?` · 同比 ${mom>=0?'↑':'↓'} ${Math.abs(mom)}%`:''}</div>
+    </div>
+
+    <div class="acc-tabs">
+      <div class="t ${accTab==='summary'?'on':''}" onclick="setAccTab('summary')">概览</div>
+      <div class="t ${accTab==='budget'?'on':''}" onclick="setAccTab('budget')">预算</div>
+      <div class="t ${accTab==='list'?'on':''}" onclick="setAccTab('list')">明细</div>
+    </div>
+
+    ${accTab==='list'?`<div class="search-bar"><input type="search" id="txSearch" placeholder="搜索备注 / 分类 / 金额" value="${escapeHTML(window.accSearch)}" oninput="window.accSearch=this.value;renderAccContent()"></div>`:''}
+
+    <div id="accContent"></div>
+  `;
+  $('#page-account').innerHTML=html;
+  renderAccContent();
+}
+
+window.renderAccContent=function(){
+  const d=new Date();d.setMonth(d.getMonth()+accMonthOffset);
+  const mStr=monthStr(d);
+  const txs=DB.accounts.transactions.filter(x=>x.date.startsWith(mStr));
+  const expense=txs.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
+  const budget=DB.accounts.budget.monthly;
+  const budgetPct=budget?Math.round(expense/budget*100):0;
+  const catMap={};
+  txs.filter(x=>x.type==='expense').forEach(x=>{catMap[x.category]=(catMap[x.category]||0)+x.amount;});
+  const cats=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const totalExp=expense||1;
+  const donutSVG=renderDonut(cats.map(c=>({label:c[0],value:c[1],color:CAT_COLORS[c[0]]||'#9A958A'})),totalExp);
+
+  let content='';
+  if(accTab==='summary'){
+    content=`
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-family:var(--serif);font-size:14px">消费结构</span><span style="font-size:11px;color:var(--ink-3)">本月</span></div>
+        ${cats.length?`<div class="struct-chart">${donutSVG}<div class="struct-legend">
+          ${cats.slice(0,6).map(c=>{const pct=(c[1]/totalExp*100).toFixed(0);return `<div class="sl"><div class="lf"><span class="sw" style="background:${CAT_COLORS[c[0]]||'#9A958A'}"></span><span>${c[0]}</span></div><span style="font-family:var(--serif)">¥${fmtMoney(c[1])} <span style="color:var(--ink-3);font-size:11px">${pct}%</span></span></div>`;}).join('')}
+        </div></div>`:`<div class="empty-state" style="padding:20px"><div class="t">本月暂无支出</div></div>`}
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:var(--serif);font-size:14px">月度对比</span></div>
+        ${renderMonthCompare(d)}
+      </div>
+      <button class="btn ghost block sm" style="margin-top:14px" onclick="exportAccountExcel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出本月 Excel
+      </button>
+    `;
+  }else if(accTab==='budget'){
+    const used=expense;
+    const remain=budget-used;
+    const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    content=`
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
+          <span style="font-family:var(--serif);font-size:16px">月度预算</span>
+          <span style="font-family:var(--serif);font-size:20px">¥${fmtMoney(budget)}</span>
+        </div>
+        <div class="budget-bar">
+          <div class="bb-top"><span>已用 ¥${fmtMoney(used)}</span><span style="color:${budgetPct>100?'var(--clay)':'var(--ink-2)'}">${budgetPct}%</span></div>
+          <div class="bb-track"><div class="bb-fill ${budgetPct>100?'over':budgetPct>80?'warn':''}" style="width:${Math.min(100,budgetPct)}%"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:6px">
+            <span>${remain>=0?'剩余':'超支'} ¥${fmtMoney(Math.abs(remain))}</span>
+            <span>日均预算 ¥${fmtMoney(budget/daysInMonth)}</span>
+          </div>
+        </div>
+        <button class="btn ghost sm block" style="margin-top:12px" onclick="editBudget()">调整预算</button>
+      </div>
+      <div class="card">
+        <div style="font-family:var(--serif);font-size:14px;margin-bottom:10px">分类预算</div>
+        ${['餐饮','交通','购物','居家','娱乐','健康'].map(c=>{
+          const usedC=catMap[c]||0;
+          const budgetC=DB.accounts.budget.categories[c]||0;
+          const pctC=budgetC?Math.round(usedC/budgetC*100):0;
+          return `<div style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${c}</span><span style="color:var(--ink-3)">¥${fmtMoney(usedC)}${budgetC?'/¥'+fmtMoney(budgetC):''}</span></div>
+            <div class="bb-track"><div class="bb-fill ${pctC>100?'over':pctC>80?'warn':''}" style="width:${budgetC?Math.min(100,pctC):0}%;${budgetC?'':'background:var(--line-2)'}"></div></div>
+          </div>`;
+        }).join('')}
+        <button class="btn ghost sm block" style="margin-top:8px" onclick="editCatBudget()">设置分类预算</button>
+      </div>
+    `;
+  }else{
+    // 明细：搜索 + 筛选 + 按日分组
+    const q=(window.accSearch||'').trim().toLowerCase();
+    let shown=txs;
+    if(accFilter!=='all')shown=shown.filter(x=>x.type===(accFilter==='in'?'income':'expense'));
+    if(accCat!=='全部')shown=shown.filter(x=>x.category===accCat);
+    if(q)shown=shown.filter(x=>(x.note||'').toLowerCase().includes(q)||x.category.toLowerCase().includes(q)||String(x.amount).includes(q)||(x.date+' '+(x.time||'')).includes(q));
+    shown=shown.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.time||'').localeCompare(a.time||''));
+    const groups={};
+    shown.forEach(x=>{(groups[x.date]=groups[x.date]||[]).push(x);});
+    const dates=Object.keys(groups).sort((a,b)=>b.localeCompare(a));
+    const allCats=['全部','餐饮','交通','购物','居家','娱乐','健康','其他','工资'];
+    const chips=`
+      <div class="filter-chips" id="filterChips">
+        ${['全部','支出','收入'].map((f,i)=>`<div class="chip ${accFilter===['all','out','in'][i]?'on':''}" data-f="${['all','out','in'][i]}">${f}</div>`).join('')}
+      </div>
+      <div class="filter-chips" id="catChips">
+        ${allCats.map(c=>`<div class="chip ${accCat===c?'on':''}" data-cat="${c}" style="font-size:11px">${c}</div>`).join('')}
+      </div>`;
+    if(!dates.length){
+      content=`${chips}<div class="empty-state"><div class="t">${q?'没有匹配的记录':'本月暂无记录'}</div><div class="s">${q?'换个关键词试试':'点击右下角添加'}</div></div>`;
+    }else{
+      content=`${chips}<div class="card" style="padding:2px 14px 10px">
+        ${dates.map(ds=>{
+          const items=groups[ds];
+          const dayIn=items.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0);
+          const dayOut=items.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
+          const wd=['日','一','二','三','四','五','六'][new Date(ds+'T00:00:00').getDay()];
+          return `
+          <div class="tx-day">
+            <div class="tx-day-head">
+              <span>${parseInt(ds.slice(5,7))}月${parseInt(ds.slice(8,10))}日 · 周${wd}</span>
+              <span class="tx-day-sum">${dayIn?`收 <b class="in">¥${fmtMoney(dayIn)}</b> `:''}${dayOut?`支 <b>¥${fmtMoney(dayOut)}</b>`:''}</span>
+            </div>
+            <ul class="tx-list">${items.map(x=>`<li onclick="openTxDetail('${x.id}')">
+              <div class="cat-ico" style="background:${CAT_BG[x.category]||'#EEE9DC'}">${CAT_EMOJI[x.category]||'·'}</div>
+              <div class="info"><div class="n">${escapeHTML(x.note||x.category)}</div><div class="d">${x.time?`<b style="font-weight:600">${escapeHTML(x.time)}</b> `:''}${x.category}</div></div>
+              <div class="amt ${x.type==='income'?'in':'out'}">${x.type==='income'?'+':'-'}¥${fmtMoney(x.amount)}</div>
+            </li>`).join('')}</ul>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+  }
+  $('#accContent').innerHTML=content;
+
+  // 绑定筛选（点击只刷新内容区，搜索框保留焦点）
+  $$('#filterChips .chip').forEach(el=>{
+    el.addEventListener('click',()=>{accFilter=el.dataset.f;renderAccContent();});
+  });
+  $$('#catChips .chip').forEach(el=>{
+    el.addEventListener('click',()=>{accCat=el.dataset.cat;renderAccContent();});
+  });
+}
+
+function renderDonut(data,total){
+  if(!data.length)return '<svg width="100" height="100"></svg>';
+  const r=42,cx=50,cy=50;
+  let acc=0;
+  const circ=2*Math.PI*r;
+  let segs='';
+  data.forEach(d=>{
+    const frac=d.value/total;
+    const dash=frac*circ;
+    const offset=-acc*circ;
+    segs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.color}" stroke-width="12" stroke-dasharray="${dash} ${circ-dash}" stroke-dashoffset="${offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    acc+=frac;
+  });
+  return `<svg width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="none" stroke="#EFEADD" stroke-width="12"/>${segs}<text x="50" y="48" text-anchor="middle" font-family="Georgia" font-size="11" fill="#9A958A">合计</text><text x="50" y="62" text-anchor="middle" font-family="Georgia" font-size="13" fill="#1C1B18">¥${fmtMoney(total)}</text></svg>`;
+}
+
+function renderMonthCompare(curD){
+  // 最近6个月支出柱状
+  const months=[];
+  for(let i=5;i>=0;i--){
+    const d=new Date(curD);d.setMonth(d.getMonth()-i);
+    const ms=monthStr(d);
+    const exp=DB.accounts.transactions.filter(x=>x.date.startsWith(ms)&&x.type==='expense').reduce((s,x)=>s+x.amount,0);
+    months.push({label:(d.getMonth()+1)+'月',exp,isCur:i===0});
+  }
+  const max=Math.max(...months.map(m=>m.exp),1);
+  const barW=32;
+  return `<div style="display:flex;align-items:flex-end;justify-content:space-between;height:120px;padding:10px 0 0">
+    ${months.map(m=>`<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
+      <div style="font-size:10px;color:var(--ink-3);font-family:var(--serif)">${m.exp?Math.round(m.exp):''}</div>
+      <div style="width:${barW}px;height:${Math.max(4,m.exp/max*80)}px;background:${m.isCur?'var(--moss)':'var(--line-2)'};border-radius:3px 3px 0 0"></div>
+      <div style="font-size:10px;color:${m.isCur?'var(--ink)':'var(--ink-3)'}">${m.label}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+window.accPrev=()=>{accMonthOffset--;renderAccount();};
+window.accNext=()=>{if(accMonthOffset>=0)return;accMonthOffset++;renderAccount();};
+window.setAccTab=t=>{accTab=t;renderAccount();};
+window.renderAccount=renderAccount;
+window.exportAccountExcel=function(){
+  const d=new Date();d.setMonth(d.getMonth()+accMonthOffset);
+  const mStr=monthStr(d);
+  const txs=DB.accounts.transactions.filter(x=>x.date.startsWith(mStr)).sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+  if(!txs.length){toast('本月无记录',1500);return;}
+  // CSV with BOM for Excel
+  const rows=[['日期','时间','类型','分类','金额','备注']];
+  txs.forEach(x=>rows.push([x.date,x.time||'',x.type==='income'?'收入':'支出',x.category,x.amount,x.note||'']));
+  const csv='\ufeff'+rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  triggerDownload(`账本-${mStr}.csv`, csv, 'text/csv;charset=utf-8');
+  toast('已导出 CSV（Excel 可打开）',2000);
+};
+
+window.editBudget=function(){
+  openSheet('调整月度预算',`
+    <div class="field"><label>每月预算总额</label><input type="number" id="budInput" value="${DB.accounts.budget.monthly}" min="0"></div>
+    <button class="btn moss block" onclick="saveBudget()">保存</button>
+  `);
+};
+window.saveBudget=function(){
+  const v=parseFloat($('#budInput').value)||0;
+  DB.accounts.budget.monthly=v;saveData();closeSheet();renderAccount();toast('已更新',1000);
+};
+window.editCatBudget=function(){
+  const cats=['餐饮','交通','购物','居家','娱乐','健康'];
+  openSheet('分类预算',`
+    ${cats.map(c=>`<div class="field"><label>${c}</label><input type="number" data-cat="${c}" value="${DB.accounts.budget.categories[c]||''}" min="0" placeholder="不限"></div>`).join('')}
+    <button class="btn moss block" onclick="saveCatBudget()">保存</button>
+  `);
+};
+window.saveCatBudget=function(){
+  $$('[data-cat]').forEach(el=>{
+    const v=parseFloat(el.value);
+    if(v>0)DB.accounts.budget.categories[el.dataset.cat]=v;
+    else delete DB.accounts.budget.categories[el.dataset.cat];
+  });
+  saveData();closeSheet();renderAccount();toast('已保存',1000);
+};
+
+window.openTxSheet=function(){
+  openSheet('记一笔',`
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="btn clay sm" style="flex:1" id="txTypeExp" onclick="setTxType('expense')">支出</button>
+      <button class="btn ghost sm" style="flex:1" id="txTypeInc" onclick="setTxType('income')">收入</button>
+    </div>
+    <div class="field"><label>金额</label><input type="number" id="txAmount" placeholder="0.00" inputmode="decimal"></div>
+    <div class="field"><label>分类</label><select id="txCat">
+      ${['餐饮','交通','购物','居家','娱乐','健康','其他','工资'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+    </select></div>
+    <div class="field"><label>备注</label><input type="text" id="txNote" placeholder="可选"></div>
+    <div class="field"><label>日期</label><input type="date" id="txDate" value="${todayStr()}"></div>
+    <div class="field"><label>时间</label><input type="time" id="txTime" value="${nowTime()}" step="1"></div>
+    <button class="btn moss block" onclick="saveTx()">保存</button>
+  `,()=>{window._txType='expense';});
+};
+window.setTxType=function(t){
+  window._txType=t;
+  $('#txTypeExp').className='btn '+(t==='expense'?'clay':'ghost')+' sm';
+  $('#txTypeExp').style.flex=1;
+  $('#txTypeInc').className='btn '+(t==='income'?'moss':'ghost')+' sm';
+  $('#txTypeInc').style.flex=1;
+};
+window.saveTx=function(){
+  const amount=parseFloat($('#txAmount').value);
+  if(!amount||amount<=0){toast('请输入金额',1500);return;}
+  const tx={id:uid(),type:window._txType||'expense',amount:amount,category:$('#txCat').value,note:$('#txNote').value,date:$('#txDate').value,time:normTime(($('#txTime')||{}).value||'')};
+  DB.accounts.transactions.push(tx);saveData();closeSheet();renderAccount();renderToday();toast('已记录',1000);
+};
+
+/* ---------- 交易详情 / 编辑 / 删除 ---------- */
+window.openTxDetail=function(id){
+  const x=DB.accounts.transactions.find(t=>t.id===id);if(!x)return;
+
+  openSheet('交易详情',`
+    <div style="text-align:center;padding:6px 0 16px">
+      <div style="font-family:var(--serif);font-size:30px;color:${x.type==='income'?'var(--moss)':'var(--clay)'}">${x.type==='income'?'+':'-'}¥${fmtMoney(x.amount)}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:8px">${CAT_EMOJI[x.category]||'·'} ${x.category} · ${x.type==='income'?'收入':'支出'}</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:4px">${x.date}${x.time?' '+x.time:''}</div>
+      ${x.note?`<div style="font-size:13px;color:var(--ink-2);margin-top:12px;padding:8px 12px;background:var(--bg);border-radius:6px;text-align:left">${escapeHTML(x.note)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="editTx('${x.id}')">编辑</button>
+      <button class="btn clay sm" style="flex:1" onclick="delTx('${x.id}')">删除</button>
+    </div>
+  `);
+};
+window.editTx=function(id){
+  const x=DB.accounts.transactions.find(t=>t.id===id);if(!x)return;
+  closeSheet();
+  setTimeout(()=>{
+    openSheet('编辑记录',`
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn clay sm" style="flex:1" id="txTypeExp" onclick="setTxType('expense')">支出</button>
+        <button class="btn ghost sm" style="flex:1" id="txTypeInc" onclick="setTxType('income')">收入</button>
+      </div>
+      <div class="field"><label>金额</label><input type="number" id="txAmount" value="${x.amount}" inputmode="decimal"></div>
+      <div class="field"><label>分类</label><select id="txCat">
+        ${['餐饮','交通','购物','居家','娱乐','健康','其他','工资'].map(c=>`<option value="${c}" ${c===x.category?'selected':''}>${c}</option>`).join('')}
+      </select></div>
+      <div class="field"><label>备注</label><input type="text" id="txNote" value="${escapeHTML(x.note||'')}"></div>
+      <div class="field"><label>日期</label><input type="date" id="txDate" value="${x.date}"></div>
+      <div class="field"><label>时间</label><input type="time" id="txTime" value="${x.time||''}" step="1"></div>
+      <button class="btn moss block" onclick="saveEditTx('${x.id}')">保存修改</button>
+    `,()=>{ setTxType(x.type); });
+  },300);
+};
+window.saveEditTx=function(id){
+  const x=DB.accounts.transactions.find(t=>t.id===id);if(!x)return;
+  const amount=parseFloat($('#txAmount').value);
+  if(!amount||amount<=0){toast('请输入金额',1500);return;}
+  x.type=window._txType||x.type;
+  x.amount=amount;
+  x.category=$('#txCat').value;
+  x.note=$('#txNote').value;
+  x.date=$('#txDate').value;
+  x.time=normTime(($('#txTime')||{}).value||'');
+  saveData();closeSheet();renderAccount();renderToday();toast('已更新',1000);
+};
+window.delTx=function(id){
+  confirmModal({
+    title:'删除记录',
+    body:'删除这笔记录？此操作不可恢复。',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.accounts.transactions=DB.accounts.transactions.filter(t=>t.id!==id);
+      saveData();closeSheet();renderAccount();renderToday();toast('已删除',1000);
+    }
+  });
+};
+
+/* ========================================================
+   渲染：习惯
+   ======================================================== */
+function renderHabit(){
+  const items=DB.habits.items;
+  const html=`
+    <div class="section">
+      <div class="section-head"><h2>我的习惯</h2><span class="more" onclick="openHabitSheet()">＋ 新建</span></div>
+      ${items.length?items.map(h=>{
+        const log=DB.habits.logs[h.id]||{};
+        const todayV=log[todayStr()]||0;
+        let done=false,display='';
+        if(h.type==='check'){done=todayV>=1;display=done?'已完成':'未完成';}
+        else if(h.type==='count'){done=todayV>=h.target;display=`${todayV} / ${h.target}`;}
+        else{done=todayV>=h.target;display=`${todayV}${h.unit||''} / ${h.target}${h.unit||''}`;}
+        // 30天热力图
+        const heat=[];
+        for(let i=29;i>=0;i--){
+          const ds=daysAgoStr(i);
+          const v=log[ds]||0;
+          let lvl=0;
+          if(h.type==='check')lvl=v>=1?4:0;
+          else{const p=h.target?v/h.target:0;lvl=p>=1?4:p>=0.75?3:p>=0.5?2:p>0?1:0;}
+          heat.push(`<div class="h l${lvl}" title="${ds}: ${v}"></div>`);
+        }
+        // 连续天数
+        let streak=0;
+        for(let i=0;i<30;i++){
+          const ds=daysAgoStr(i);
+          const v=log[ds]||0;
+          const ok=h.type==='check'?v>=1:v>0;
+          if(ok)streak++;else break;
+        }
+        return `<div class="habit-item">
+          <div class="hi-top">
+            <div class="hi-name"><span class="pd" style="background:${h.color}"></span>${escapeHTML(h.name)}</div>
+            <button class="icon-btn" onclick="delHabit('${h.id}')" style="width:28px;height:28px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+          <div class="hi-type">${h.type==='check'?'勾选':h.type==='count'?'计数':'数值'} · 连续 ${streak} 天</div>
+          <div class="hi-mid">
+            <div class="hi-action">
+              ${h.type==='check'?
+                `<button class="hbtn ${done?'done':''}" onclick="quickHabit('${h.id}')">${done?'<svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':'✓'}</button>`:
+                `<button class="hbtn" onclick="habitDec('${h.id}')">−</button>
+                 <div class="v">${display}</div>
+                 <button class="hbtn" onclick="habitInc('${h.id}')">+</button>`
+              }
+            </div>
+            <span style="font-size:11px;color:${done?'var(--moss)':'var(--ink-3)'}">${done?'已完成':'待完成'}</span>
+          </div>
+          <div class="heat">${heat.join('')}</div>
+          <div class="heat-legend">少 <span class="lg" style="background:var(--surface-2)"></span><span class="lg" style="background:#D8E0D2"></span><span class="lg" style="background:#A8BC9E"></span><span class="lg" style="background:#6E8A5F"></span><span class="lg" style="background:var(--moss)"></span> 多</div>
+        </div>`;
+      }).join(''):`<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><div class="t">还没有习惯</div><div class="s">新建一个，从今天开始</div></div>`}
+    </div>
+  `;
+  $('#page-habit').innerHTML=html;
+}
+window.openHabitSheet=function(){
+  openSheet('新建习惯',`
+    <div class="field"><label>名称</label><input type="text" id="hName" placeholder="如：阅读 30 分钟"></div>
+    <div class="field"><label>打卡方式</label><select id="hType" onchange="toggleHabitTarget()">
+      <option value="check">勾选（完成/未完成）</option>
+      <option value="count">计数（如喝水 8 杯）</option>
+      <option value="value">数值（如步数）</option>
+    </select></div>
+    <div class="field" id="targetField" style="display:none"><label>目标值</label><input type="number" id="hTarget" value="1" min="1"></div>
+    <div class="field" id="unitField" style="display:none"><label>单位（数值型可选）</label><input type="text" id="hUnit" placeholder="如：步、分钟"></div>
+    <div class="field"><label>颜色</label><div id="colorPick" style="display:flex;gap:8px">
+      ${['#3F5340','#5A7A86','#B89254','#B5604A','#8A6E9E','#6E8A5F'].map((c,i)=>`<div class="cp ${i===0?'on':''}" data-c="${c}" style="width:30px;height:30px;border-radius:50%;background:${c};${i===0?'box-shadow:0 0 0 2px var(--bg),0 0 0 4px '+c:''}"></div>`).join('')}
+    </div></div>
+    <button class="btn moss block" onclick="saveHabit()">创建</button>
+  `,()=>{window._hColor='#3F5340';
+    $$('.cp').forEach(el=>el.addEventListener('click',()=>{
+      $$('.cp').forEach(x=>x.style.boxShadow='none');
+      el.style.boxShadow=`0 0 0 2px var(--bg),0 0 0 4px ${el.dataset.c}`;
+      window._hColor=el.dataset.c;
+    }));
+  });
+};
+window.toggleHabitTarget=function(){
+  const t=$('#hType').value;
+  $('#targetField').style.display=t==='check'?'none':'block';
+  $('#unitField').style.display=t==='value'?'block':'none';
+};
+window.saveHabit=function(){
+  const name=$('#hName').value.trim();
+  if(!name){toast('请输入名称',1500);return;}
+  const type=$('#hType').value;
+  const target=type==='check'?1:(parseInt($('#hTarget').value)||1);
+  const unit=type==='value'?($('#hUnit').value||''):'';
+  DB.habits.items.push({id:uid(),name,type,target,color:window._hColor||'#3F5340',unit,createdAt:todayStr()});
+  saveData();closeSheet();renderHabit();toast('已创建',1000);
+};
+window.delHabit=function(id){
+  confirmModal({
+    title:'删除习惯',
+    body:'删除该习惯及其所有打卡记录？此操作不可恢复。',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.habits.items=DB.habits.items.filter(h=>h.id!==id);
+      delete DB.habits.logs[id];
+      saveData();renderHabit();toast('已删除',1000);
+    }
+  });
+};
+window.habitInc=function(id){
+  const h=DB.habits.items.find(x=>x.id===id);if(!h)return;
+  const log=DB.habits.logs[id]||(DB.habits.logs[id]={});
+  const cur=log[todayStr()]||0;
+  log[todayStr()]=cur+(h.type==='count'?1:Math.max(1,Math.round(h.target*0.1)));
+  saveData();renderHabit();
+};
+window.habitDec=function(id){
+  const h=DB.habits.items.find(x=>x.id===id);if(!h)return;
+  const log=DB.habits.logs[id]||(DB.habits.logs[id]={});
+  const cur=log[todayStr()]||0;
+  log[todayStr()]=Math.max(0,cur-(h.type==='count'?1:Math.max(1,Math.round(h.target*0.1))));
+  saveData();renderHabit();
+};
+
+/* ========================================================
+   渲染：健身
+   ======================================================== */
+function renderFitness(){
+  const records=DB.fitness.records.slice().sort((a,b)=>a.date.localeCompare(b.date));
+  const last=records[records.length-1];
+  const first=records[0];
+  const goal=DB.fitness.goal;
+
+  const html=`
+    <div class="section">
+      ${last?`
+      <div class="fit-hero">
+        <div class="weight">${last.weight}<span class="u">kg</span></div>
+        <div class="delta">
+          ${first&&first.date!==last.date?`较起始 <b class="${last.weight<=first.weight?'down':'up'}">${last.weight>=first.weight?'+':''}${(last.weight-first.weight).toFixed(1)} kg</b> · `:''}
+          ${last.bodyFat?`体脂 <b>${last.bodyFat}%</b>`:''}
+        </div>
+      </div>
+
+      <div class="fit-stats">
+        <div class="fs"><div class="v">${calcBMI(last.weight,goal.height)}</div><div class="l">BMI</div></div>
+        <div class="fs"><div class="v">${last.bodyFat||'--'}%</div><div class="l">体脂率</div></div>
+        <div class="fs"><div class="v">${calcAvg7(records).toFixed(1)}</div><div class="l">7日均线</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-family:var(--serif);font-size:14px">体重趋势</span><span style="font-size:11px;color:var(--ink-3)">近 ${Math.min(records.length,30)} 天</span></div>
+        ${renderWeightChart(records)}
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-family:var(--serif);font-size:14px;margin-bottom:12px">目标进度</div>
+        <div class="goal-progress">
+          <div class="gp-top"><span>从 ${goal.startWeight}kg → ${goal.targetWeight}kg</span><span>${calcGoalPct(records,goal)}%</span></div>
+          <div class="gp-track"><div class="gp-fill" style="width:${calcGoalPct(records,goal)}%"></div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin-top:8px">
+          <span>已减 ${Math.max(0,(goal.startWeight-last.weight)).toFixed(1)} kg</span>
+          <span>还需 ${Math.max(0,(last.weight-goal.targetWeight)).toFixed(1)} kg</span>
+        </div>
+        ${calcDailyDeficit(records,goal)?`
+        <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-size:13px">所需热量缺口</span>
+            <span style="font-family:var(--serif);font-size:18px;color:var(--clay)">${calcDailyDeficit(records,goal)} <span style="font-size:11px;color:var(--ink-3)">kcal/天</span></span>
+          </div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:4px">按当前节奏，约 ${calcETA(records,goal)} 天达成目标</div>
+        </div>`:''}
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <span style="font-family:var(--serif);font-size:14px">周训练计划</span>
+          <button class="icon-btn" onclick="editWeekPlan()" style="width:28px;height:28px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        </div>
+        <div class="week-plan">
+          ${['一','二','三','四','五','六','日'].map((n,i)=>{
+            const day=i+1;const plan=goal.weeklyPlan[day]||'休息';
+            const today=new Date().getDay();const tDay=today===0?7:today;
+            return `<div class="wp-day"><div class="wp-d ${day===tDay?'on':''}">${n}</div><div class="wp-c">${escapeHTML(plan)}</div></div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-family:var(--serif);font-size:14px">记录历史</span><button class="btn ghost sm" onclick="openFitSheet()">＋ 记录</button></div>
+        ${records.slice(-5).reverse().map(r=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openFitDetail('${r.id}')">
+          <div><div style="font-size:13px">${r.date}</div>${r.note?`<div style="font-size:11px;color:var(--ink-3)">${escapeHTML(r.note)}</div>`:''}</div>
+          <div style="text-align:right;font-family:var(--serif)"><div>${r.weight} kg</div>${r.bodyFat?`<div style="font-size:11px;color:var(--ink-3)">${r.bodyFat}%</div>`:''}</div>
+        </div>`).join('')}
+      </div>
+      `:`<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M6 4v16M18 4v16M2 9v6M22 9v6M6 12h12"/></svg><div class="t">还没有记录</div><div class="s">记录今日体重开始追踪</div></div>
+      <button class="btn moss block" onclick="openFitSheet()">添加第一条记录</button>`}
+    </div>
+  `;
+  $('#page-fitness').innerHTML=html;
+}
+function calcBMI(w,height){
+  const h=height||1.70;return (w/(h*h)).toFixed(1);
+}
+function calcAvg7(records){
+  const last7=records.slice(-7);
+  if(!last7.length)return 0;
+  return last7.reduce((s,r)=>s+r.weight,0)/last7.length;
+}
+function calcGoalPct(records,goal){
+  if(!records.length)return 0;
+  const last=records[records.length-1];
+  const total=goal.startWeight-goal.targetWeight;
+  if(total<=0)return 0;
+  const done=goal.startWeight-last.weight;
+  return Math.max(0,Math.min(100,Math.round(done/total*100)));
+}
+function calcDailyDeficit(records,goal){
+  if(records.length<2)return 0;
+  const last=records[records.length-1];
+  const first=records[0];
+  const days=(parseDate(last.date)-parseDate(first.date))/86400000;
+  if(days<=0)return 0;
+  const perDay=(first.weight-last.weight)/days;
+  // 1kg 脂肪 ≈ 7700kcal
+  const deficit=Math.round(perDay*7700);
+  return deficit>0?deficit:0;
+}
+function calcETA(records,goal){
+  const last=records[records.length-1];
+  const remain=last.weight-goal.targetWeight;
+  if(remain<=0)return 0;
+  const deficit=calcDailyDeficit(records,goal);
+  if(deficit<=0)return Math.round(remain/0.05);
+  return Math.round(remain*7700/deficit);
+}
+function renderWeightChart(records){
+  if(records.length<2)return '<div style="text-align:center;color:var(--ink-3);font-size:12px;padding:20px 0">至少需要 2 条记录</div>';
+  const data=records.slice(-30);
+  const W=300,H=140,pad=24;
+  const weights=data.map(r=>r.weight);
+  const min=Math.min(...weights)-0.5,max=Math.max(...weights)+0.5;
+  const range=max-min||1;
+  const xStep=(W-pad*2)/Math.max(1,data.length-1);
+  const points=data.map((r,i)=>[pad+i*xStep,H-pad-((r.weight-min)/range)*(H-pad*2)]);
+  // 7日均线
+  const avgLine=[];
+  for(let i=0;i<data.length;i++){
+    const slice=data.slice(Math.max(0,i-6),i+1);
+    const avg=slice.reduce((s,r)=>s+r.weight,0)/slice.length;
+    avgLine.push([pad+i*xStep,H-pad-((avg-min)/range)*(H-pad*2)]);
+  }
+  const path=points.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const avgPath=avgLine.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=path+` L${points[points.length-1][0].toFixed(1)} ${H-pad} L${points[0][0].toFixed(1)} ${H-pad} Z`;
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="max-height:160px">
+    <defs><linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3F5340" stop-opacity="0.15"/><stop offset="100%" stop-color="#3F5340" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#wg)"/>
+    <path d="${avgPath}" fill="none" stroke="#B89254" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+    <path d="${path}" fill="none" stroke="#3F5340" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    ${points.map((p,i)=>i===points.length-1?`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#3F5340"/>`:'').join('')}
+    <text x="${pad}" y="${H-6}" font-size="9" fill="#9A958A">${data[0].date.slice(5)}</text>
+    <text x="${W-pad}" y="${H-6}" font-size="9" fill="#9A958A" text-anchor="end">${data[data.length-1].date.slice(5)}</text>
+  </svg>`;
+}
+window.openFitSheet=function(){
+  openSheet('记录体重',`
+    <div class="field"><label>日期</label><input type="date" id="fDate" value="${todayStr()}"></div>
+    <div class="field"><label>体重 (kg)</label><input type="number" id="fWeight" step="0.1" inputmode="decimal"></div>
+    <div class="field"><label>体脂率 (%)</label><input type="number" id="fFat" step="0.1" inputmode="decimal" placeholder="可选"></div>
+    <div class="field"><label>备注</label><input type="text" id="fNote" placeholder="可选"></div>
+    <button class="btn moss block" onclick="saveFit()">保存</button>
+  `);
+};
+window.saveFit=function(){
+  const w=parseFloat($('#fWeight').value);
+  if(!w||w<=0){toast('请输入体重',1500);return;}
+  const rec={id:uid(),date:$('#fDate').value,weight:w,bodyFat:parseFloat($('#fFat').value)||0,note:$('#fNote').value};
+  // 同日替换
+  DB.fitness.records=DB.fitness.records.filter(r=>r.date!==rec.date);
+  DB.fitness.records.push(rec);
+  DB.fitness.records.sort((a,b)=>a.date.localeCompare(b.date));
+  saveData();closeSheet();renderFitness();toast('已记录',1000);
+};
+
+/* ---------- 体重记录详情 / 编辑 / 删除 ---------- */
+window.openFitDetail=function(id){
+  const r=DB.fitness.records.find(x=>x.id===id);if(!r)return;
+  openSheet('体重记录',`
+    <div style="text-align:center;padding:6px 0 16px">
+      <div style="font-family:var(--serif);font-size:28px">${r.weight} kg</div>
+      <div style="font-size:12px;color:var(--ink-3);margin-top:6px">${r.date}${r.bodyFat?` · 体脂 ${r.bodyFat}%`:''}</div>
+      ${r.note?`<div style="font-size:13px;color:var(--ink-2);margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;text-align:left">${escapeHTML(r.note)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="editFit('${r.id}')">编辑</button>
+      <button class="btn clay sm" style="flex:1" onclick="delFit('${r.id}')">删除</button>
+    </div>
+  `);
+};
+window.editFit=function(id){
+  const r=DB.fitness.records.find(x=>x.id===id);if(!r)return;
+  closeSheet();
+  setTimeout(()=>{
+    openSheet('编辑记录',`
+      <div class="field"><label>日期</label><input type="date" id="fDate" value="${r.date}"></div>
+      <div class="field"><label>体重 (kg)</label><input type="number" id="fWeight" step="0.1" inputmode="decimal" value="${r.weight}"></div>
+      <div class="field"><label>体脂率 (%)</label><input type="number" id="fFat" step="0.1" inputmode="decimal" value="${r.bodyFat||''}" placeholder="可选"></div>
+      <div class="field"><label>备注</label><input type="text" id="fNote" value="${escapeHTML(r.note||'')}" placeholder="可选"></div>
+      <button class="btn moss block" onclick="saveEditFit('${r.id}')">保存修改</button>
+    `);
+  },300);
+};
+window.saveEditFit=function(id){
+  const r=DB.fitness.records.find(x=>x.id===id);if(!r)return;
+  const w=parseFloat($('#fWeight').value);
+  if(!w||w<=0){toast('请输入体重',1500);return;}
+  r.date=$('#fDate').value;r.weight=w;r.bodyFat=parseFloat($('#fFat').value)||0;r.note=$('#fNote').value;
+  saveData();closeSheet();renderFitness();toast('已更新',1000);
+};
+window.delFit=function(id){
+  confirmModal({
+    title:'删除记录',
+    body:'删除这条体重记录？此操作不可恢复。',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.fitness.records=DB.fitness.records.filter(x=>x.id!==id);
+      saveData();closeSheet();renderFitness();toast('已删除',1000);
+    }
+  });
+};
+window.editWeekPlan=function(){
+  const g=DB.fitness.goal;
+  openSheet('编辑周计划',`
+    ${['一','二','三','四','五','六','日'].map((n,i)=>{
+      const day=i+1;
+      return `<div class="field"><label>周${n}</label><input type="text" data-day="${day}" value="${escapeHTML(g.weeklyPlan[day]||'')}" placeholder="如：有氧 30 分 / 休息"></div>`;
+    }).join('')}
+    <div class="field"><label>目标体重</label><input type="number" id="goalWeight" value="${g.targetWeight}" step="0.1"></div>
+    <div class="field"><label>身高 (m)</label><input type="number" id="goalHeight" value="${g.height||1.70}" step="0.01"></div>
+    <button class="btn moss block" onclick="saveWeekPlan()">保存</button>
+  `);
+};
+window.saveWeekPlan=function(){
+  $$('[data-day]').forEach(el=>{
+    DB.fitness.goal.weeklyPlan[el.dataset.day]=el.value||'休息';
+  });
+  DB.fitness.goal.targetWeight=parseFloat($('#goalWeight').value)||DB.fitness.goal.targetWeight;
+  DB.fitness.goal.height=parseFloat($('#goalHeight').value)||1.70;
+  saveData();closeSheet();renderFitness();toast('已保存',1000);
+};
+
+/* ========================================================
+   渲染：日程
+   ======================================================== */
+let schedCurDate=todayStr();
+function renderSchedule(){
+  const d=parseDate(schedCurDate);
+  const year=d.getFullYear(),month=d.getMonth();
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const today=todayStr();
+  const events=DB.schedule.events;
+
+  let calHTML='<div class="cal"><div class="cal-head"><div class="m">'+year+'年'+(month+1)+'月</div><div><button class="icon-btn" onclick="schedPrevMonth()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg></button><button class="icon-btn" onclick="schedToday()">今</button><button class="icon-btn" onclick="schedNextMonth()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></button></div></div><div class="cal-grid">';
+  ['日','一','二','三','四','五','六'].forEach(w=>calHTML+=`<div class="wk">${w}</div>`);
+  for(let i=0;i<firstDay;i++)calHTML+='<div class="dc other"></div>';
+  for(let dd=1;dd<=daysInMonth;dd++){
+    const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+    const has=events.some(e=>e.date===ds);
+    const cls=[];
+    if(ds===today)cls.push('today');
+    if(ds===schedCurDate)cls.push('sel');
+    if(has)cls.push('has');
+    calHTML+=`<div class="dc ${cls.join(' ')}" onclick="schedPick('${ds}')">${dd}</div>`;
+  }
+  calHTML+='</div></div>';
+
+  const dayEvents=events.filter(e=>e.date===schedCurDate).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  const dStr=`${d.getMonth()+1}月${d.getDate()}日`;
+
+  $('#page-schedule').innerHTML=`
+    ${calHTML}
+    <div class="section">
+      <div class="section-head"><h2>${dStr}的安排</h2><span class="more" onclick="openEventSheet('${schedCurDate}')">＋ 添加</span></div>
+      <div class="card">
+        ${dayEvents.length?`<ul class="mini-list" style="list-style:none">
+          ${dayEvents.map(e=>`<li class="sched-item">
+            <div class="time">${e.time||'全天'}${e.time?`<div class="t2">${e.category}</div>`:''}</div>
+            <div class="si-body"><div class="t ${e.done?'done':''}">${escapeHTML(e.title)}</div>${e.note?`<div class="cat">${escapeHTML(e.note)}</div>`:''}${!e.time?`<div class="cat">${e.category}</div>`:''}</div>
+            <button class="icon-btn" onclick="toggleEventDone('${e.id}')" style="width:32px;height:32px"><div class="chk ${e.done?'on':''}">${e.done?'<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg>':''}</div></button>
+          </li>`).join('')}
+        </ul>`:`<div class="empty-state" style="padding:24px"><div class="t">这天没有安排</div></div>`}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>待买清单</h2><span class="more" onclick="go('shopping')">管理 ›</span></div>
+      <div class="card">
+        ${DB.shopping.items.filter(s=>!s.bought).slice(0,5).map(s=>`<div class="shop-item"><div class="info"><div class="n">${escapeHTML(s.name)}</div><div class="sub">${s.category||''} · ${s.qty||1}件</div></div><div class="price">¥${fmtMoney(s.price||0)}</div><button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk"></div></button></div>`).join('')||'<div class="empty-state" style="padding:20px"><div class="t">暂无待买</div></div>'}
+      </div>
+    </div>
+  `;
+}
+window.schedPrevMonth=function(){const d=parseDate(schedCurDate);d.setMonth(d.getMonth()-1);schedCurDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;renderSchedule();};
+window.schedNextMonth=function(){const d=parseDate(schedCurDate);d.setMonth(d.getMonth()+1);schedCurDate=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;renderSchedule();};
+window.schedToday=function(){schedCurDate=todayStr();renderSchedule();};
+window.schedPick=function(ds){schedCurDate=ds;renderSchedule();};
+window.openEventSheet=function(preDate){
+  openSheet('添加日程',`
+    <div class="field"><label>事项</label><input type="text" id="evTitle" placeholder="如：晨会"></div>
+    <div class="field"><label>日期</label><input type="date" id="evDate" value="${preDate||todayStr()}"></div>
+    <div class="field"><label>时间</label><input type="time" id="evTime" value="${nowTime()}" step="1"></div>
+    <div class="field"><label>分类</label><select id="evCat">${['工作','健康','个人','家庭','学习','其他'].map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="field"><label>备注</label><input type="text" id="evNote" placeholder="可选"></div>
+    <button class="btn moss block" onclick="saveEvent()">保存</button>
+  `);
+};
+window.saveEvent=function(){
+  const title=$('#evTitle').value.trim();
+  if(!title){toast('请输入事项',1500);return;}
+  DB.schedule.events.push({id:uid(),title,date:$('#evDate').value,time:normTime(($('#evTime')||{}).value||''),category:$('#evCat').value,note:$('#evNote').value,done:false});
+  saveData();closeSheet();renderSchedule();renderToday();toast('已添加',1000);
+};
+
+/* ========================================================
+   渲染：待买
+   ======================================================== */
+function renderShopping(){
+  const items=DB.shopping.items;
+  const todo=items.filter(s=>!s.bought);
+  const done=items.filter(s=>s.bought);
+  const total=todo.reduce((s,x)=>s+(x.price||0)*(x.qty||1),0);
+  $('#page-shopping').innerHTML=`
+    <div class="stat-banner">
+      <div class="sb-l">待买 · 预计花费</div>
+      <div class="sb-v">¥<b>${fmtMoney(total)}</b></div>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:4px">${todo.length} 件未买 · ${done.length} 件已购</div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>待买</h2><span class="more" onclick="openShopSheet()">＋ 添加</span></div>
+      <div class="card">
+        ${todo.length?todo.map(s=>`<div class="shop-item">
+          <button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk"></div></button>
+          <div class="info"><div class="n">${escapeHTML(s.name)}</div><div class="sub">${s.category||'未分类'} · ${s.qty||1}件</div></div>
+          <div class="price">¥${fmtMoney((s.price||0)*(s.qty||1))}</div>
+        </div>`).join(''):'<div class="empty-state" style="padding:24px"><div class="t">都买齐了</div></div>'}
+      </div>
+    </div>
+    ${done.length?`<div class="section"><div class="section-head"><h2>已购</h2><span class="more" onclick="clearBought()">清空</span></div><div class="card list-fade">
+      ${done.map(s=>`<div class="shop-item"><button class="icon-btn" onclick="toggleShop('${s.id}')" style="width:30px;height:30px"><div class="chk on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div></button><div class="info"><div class="n done">${escapeHTML(s.name)}</div><div class="sub">${s.category||''} · ${s.qty||1}件${s.boughtAt?` · 购于 ${s.boughtAt}`:''}</div></div><div class="price">¥${fmtMoney((s.price||0)*(s.qty||1))}</div></div>`).join('')}
+    </div></div>`:''}
+  `;
+}
+window.toggleShop=function(id){
+  const s=DB.shopping.items.find(x=>x.id===id);if(!s)return;
+  s.bought=!s.bought;
+  if(s.bought&&!s.boughtAt)s.boughtAt=todayStr()+' '+nowTime();
+  else if(!s.bought)s.boughtAt='';
+  saveData();renderShopping();renderToday();
+};
+window.clearBought=function(){
+  confirmModal({
+    title:'清空已购',
+    body:'清空已购清单？此操作不可恢复。',
+    confirmText:'清空',
+    danger:true,
+    onConfirm:()=>{
+      DB.shopping.items=DB.shopping.items.filter(s=>!s.bought);
+      saveData();renderShopping();toast('已清空',1000);
+    }
+  });
+};
+window.openShopSheet=function(){
+  openSheet('添加物品',`
+    <div class="field"><label>名称</label><input type="text" id="shName" placeholder="如：咖啡豆"></div>
+    <div class="field"><label>分类</label><select id="shCat">${['食品','日用','办公','运动','居家','数码','其他'].map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div style="display:flex;gap:8px"><div class="field" style="flex:1"><label>数量</label><input type="number" id="shQty" value="1" min="1"></div><div class="field" style="flex:1"><label>预估单价</label><input type="number" id="shPrice" value="0" min="0"></div></div>
+    <button class="btn moss block" onclick="saveShop()">添加</button>
+  `);
+};
+window.saveShop=function(){
+  const name=$('#shName').value.trim();
+  if(!name){toast('请输入名称',1500);return;}
+  DB.shopping.items.push({id:uid(),name,category:$('#shCat').value,qty:parseInt($('#shQty').value)||1,price:parseFloat($('#shPrice').value)||0,bought:false});
+  saveData();closeSheet();renderShopping();renderToday();toast('已添加',1000);
+};
+
+/* ========================================================
+   渲染：收藏
+   ======================================================== */
+let collFilter='all';
+function renderCollection(){
+  const items=DB.collection.items;
+  const view=DB.collection.view;
+  const filtered=collFilter==='all'?items:items.filter(x=>x.type===collFilter);
+  const year=new Date().getFullYear();
+  const yearItems=items.filter(x=>x.date&&x.date.startsWith(year));
+  const typeLabels={book:'书',movie:'影',music:'音'};
+  const statusLabels={'想读':'想读','在读':'在读','读过':'读过','想看':'想看','在看':'在看','看过':'看过','想听':'想听','在听':'在听','听过':'听过'};
+
+  $('#page-collection').innerHTML=`
+    <div class="year-stat">
+      <div class="ys"><div class="v">${yearItems.filter(x=>x.status==='读过').length}</div><div class="l">书 ${year}</div></div>
+      <div class="ys"><div class="v">${yearItems.filter(x=>x.status==='看过').length}</div><div class="l">影 ${year}</div></div>
+      <div class="ys"><div class="v">${yearItems.filter(x=>x.status==='听过').length}</div><div class="l">音 ${year}</div></div>
+    </div>
+    <div class="coll-tabs">
+      ${[{k:'all',l:'全部'},{k:'book',l:'书'},{k:'movie',l:'影'},{k:'music',l:'音'}].map(t=>`<div class="t ${collFilter===t.k?'on':''}" onclick="setCollFilter('${t.k}')">${t.l}</div>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-size:12px;color:var(--ink-3)">${filtered.length} 项</span>
+      <div class="view-toggle">
+        <div class="vt ${view==='wall'?'on':''}" onclick="setCollView('wall')">封面墙</div>
+        <div class="vt ${view==='list'?'on':''}" onclick="setCollView('list')">列表</div>
+      </div>
+    </div>
+    ${filtered.length?
+      (view==='wall'?
+        `<div class="wall">${filtered.map(c=>`<div class="wc" onclick="openCollDetail('${c.id}')" style="background:${c.coverColor||'#9A958A'}"><div class="cover-img" style="background:linear-gradient(135deg,${c.coverColor||'#9A958A'},${shade(c.coverColor||'#9A958A',-30)})"></div><div class="ov"><div style="font-size:10px;opacity:.7">${typeLabels[c.type]}</div><div class="st">${'★'.repeat(c.rating||0)||''}</div>${escapeHTML(c.title)}</div></div>`).join('')}</div>`
+        :
+        `<div class="card">${filtered.map(c=>`<div class="coll-list-item" onclick="openCollDetail('${c.id}')">
+          <div class="poster" style="background:${c.coverColor||'#9A958A'};color:#fff">${typeLabels[c.type]}</div>
+          <div class="ci-body">
+            <div class="t">${escapeHTML(c.title)}</div>
+            <div class="a">${escapeHTML(c.author)} · ${c.status}</div>
+            ${c.rating?`<div class="st">${'★'.repeat(c.rating)}</div>`:''}
+            ${c.note?`<div class="nt">${escapeHTML(c.note)}</div>`:''}
+          </div>
+        </div>`).join('')}</div>`
+      )
+    :'<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg><div class="t">收藏夹空着</div><div class="s">记录一本书、一部电影或一张专辑</div></div>'}
+    <button class="btn moss block" style="margin-top:16px" onclick="openCollSheet()">＋ 添加收藏</button>
+  `;
+}
+window.setCollFilter=k=>{collFilter=k;renderCollection();};
+window.setCollView=v=>{DB.collection.view=v;saveData(true);renderCollection();};
+function shade(hex,percent){
+  hex=hex.replace('#','');let r=parseInt(hex.substr(0,2),16),g=parseInt(hex.substr(2,2),16),b=parseInt(hex.substr(4,2),16);
+  r=Math.max(0,Math.min(255,r+Math.round(r*percent/100)));
+  g=Math.max(0,Math.min(255,g+Math.round(g*percent/100)));
+  b=Math.max(0,Math.min(255,b+Math.round(b*percent/100)));
+  return '#'+[r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+window.openCollSheet=function(){
+  openSheet('添加收藏',`
+    <div class="field"><label>类型</label><select id="cType" onchange="updateStatusOptions()">
+      <option value="book">书</option><option value="movie">影</option><option value="music">音</option>
+    </select></div>
+    <div class="field"><label>标题</label><input type="text" id="cTitle" placeholder="如：活着"></div>
+    <div class="field"><label>作者/导演/艺人</label><input type="text" id="cAuthor" placeholder="如：余华"></div>
+    <div class="field"><label>状态</label><select id="cStatus"></select></div>
+    <div class="field"><label>评分</label><div id="starPick" style="display:flex;gap:4px;font-size:22px;color:var(--line-2)">
+      ${[1,2,3,4,5].map(i=>`<span data-s="${i}" style="cursor:pointer">★</span>`).join('')}
+    </div></div>
+    <div class="field"><label>短评</label><textarea id="cNote" rows="2" placeholder="一句话感受"></textarea></div>
+    <div class="field"><label>封面色</label><div id="coverPick" style="display:flex;gap:8px">
+      ${['#7A5C3E','#3F5340','#B89254','#B5604A','#5A7A86','#8A6E9E','#6E8A5F'].map((c,i)=>`<div class="cvp ${i===0?'on':''}" data-c="${c}" style="width:26px;height:26px;border-radius:4px;background:${c}"></div>`).join('')}
+    </div></div>
+    <button class="btn moss block" onclick="saveColl()">添加</button>
+  `,()=>{
+    window._cRating=0;window._cColor='#7A5C3E';
+    updateStatusOptions();
+    $$('#starPick span').forEach(el=>{
+      el.addEventListener('click',()=>{
+        window._cRating=parseInt(el.dataset.s);
+        $$('#starPick span').forEach(x=>{const v=parseInt(x.dataset.s);x.style.color=v<=window._cRating?'var(--gold)':'var(--line-2)';});
+      });
+    });
+    $$('.cvp').forEach(el=>{
+      el.addEventListener('click',()=>{
+        $$('.cvp').forEach(x=>x.style.outline='none');
+        el.style.outline='2px solid var(--ink)';
+        el.style.outlineOffset='2px';
+        window._cColor=el.dataset.c;
+      });
+    });
+  });
+};
+window.updateStatusOptions=function(){
+  const t=$('#cType').value;
+  const map={book:['想读','在读','读过'],movie:['想看','在看','看过'],music:['想听','在听','听过']};
+  $('#cStatus').innerHTML=map[t].map(s=>`<option>${s}</option>`).join('');
+};
+window.saveColl=function(){
+  const title=$('#cTitle').value.trim();
+  if(!title){toast('请输入标题',1500);return;}
+  DB.collection.items.push({id:uid(),type:$('#cType').value,title,author:$('#cAuthor').value,status:$('#cStatus').value,rating:window._cRating,note:$('#cNote').value,coverColor:window._cColor,date:todayStr()});
+  saveData();closeSheet();renderCollection();toast('已收藏',1000);
+};
+window.openCollDetail=function(id){
+  const c=DB.collection.items.find(x=>x.id===id);if(!c)return;
+  const typeLabels={book:'书',movie:'影',music:'音'};
+  openSheet(c.title,`
+    <div style="display:flex;gap:14px;margin-bottom:14px">
+      <div style="width:64px;height:88px;border-radius:4px;background:${c.coverColor||'#9A958A'};display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--serif);font-size:18px;flex-shrink:0">${typeLabels[c.type]}</div>
+      <div style="flex:1"><div style="font-family:var(--serif);font-size:18px">${escapeHTML(c.title)}</div><div style="font-size:12px;color:var(--ink-3);margin-top:4px">${escapeHTML(c.author)}</div><div style="margin-top:6px"><span class="tag">${c.status}</span></div><div class="stars" style="margin-top:6px;font-size:14px">${c.rating?'★'.repeat(c.rating):'未评分'}</div></div>
+    </div>
+    ${c.note?`<div style="padding:12px;background:var(--bg);border-radius:6px;font-size:13px;color:var(--ink-2);line-height:1.6;margin-bottom:14px">${escapeHTML(c.note)}</div>`:''}
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost sm" style="flex:1" onclick="editColl('${c.id}')">编辑</button>
+      <button class="btn clay sm" style="flex:1" onclick="delColl('${c.id}')">删除</button>
+    </div>
+  `);
+};
+window.delColl=function(id){
+  confirmModal({
+    title:'删除收藏',
+    body:'删除该收藏？此操作不可恢复。',
+    confirmText:'删除',
+    danger:true,
+    onConfirm:()=>{
+      DB.collection.items=DB.collection.items.filter(x=>x.id!==id);
+      saveData();closeSheet();renderCollection();toast('已删除',1000);
+    }
+  });
+};
+window.editColl=function(id){
+  const c=DB.collection.items.find(x=>x.id===id);if(!c)return;
+  closeSheet();
+  setTimeout(()=>{
+    openSheet('编辑 - '+c.title,`
+      <div class="field"><label>状态</label><select id="eStatus">${['想读','在读','读过','想看','在看','看过','想听','在听','听过'].map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>评分</label><div id="eStarPick" style="display:flex;gap:4px;font-size:22px">${[1,2,3,4,5].map(i=>`<span data-s="${i}" style="cursor:pointer;color:${i<=c.rating?'var(--gold)':'var(--line-2)'}">★</span>`).join('')}</div></div>
+      <div class="field"><label>短评</label><textarea id="eNote" rows="2">${escapeHTML(c.note||'')}</textarea></div>
+      <button class="btn moss block" onclick="saveEditColl('${c.id}')">保存</button>
+    `,()=>{
+      window._eRating=c.rating;
+      $$('#eStarPick span').forEach(el=>{
+        el.addEventListener('click',()=>{
+          window._eRating=parseInt(el.dataset.s);
+          $$('#eStarPick span').forEach(x=>{const v=parseInt(x.dataset.s);x.style.color=v<=window._eRating?'var(--gold)':'var(--line-2)';});
+        });
+      });
+    });
+  },300);
+};
+window.saveEditColl=function(id){
+  const c=DB.collection.items.find(x=>x.id===id);if(!c)return;
+  c.status=$('#eStatus').value;c.rating=window._eRating;c.note=$('#eNote').value;
+  if(c.status==='读过'||c.status==='看过'||c.status==='听过'){if(!c.date)c.date=todayStr();}
+  saveData();closeSheet();renderCollection();toast('已更新',1000);
+};
+
+/* ========================================================
+   渲染：设置
+   ======================================================== */
+function renderSettings(){
+  const totalEntries=
+    countEntries();
+  $('#page-settings').innerHTML=`
+    <div class="stat-banner" style="cursor:pointer" onclick="openDataOverview()">
+      <div class="sb-l">数据概览 <span style="font-size:10px;opacity:.65">点击查看明细 ›</span></div>
+      <div class="sb-v"><b>${totalEntries}</b> 条记录</div>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:4px">${DB.meta.lastBackup?'上次备份：'+fmtDT(DB.meta.lastBackup):'尚未备份'}</div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>备份与恢复</h2></div>
+      <div class="set-item" onclick="exportBackup()"><div class="s-l">导出备份</div><div class="s-r">JSON 文件 ›</div></div>
+      <div class="set-item" onclick="document.getElementById('importFile').click()"><div class="s-l">导入备份</div><div class="s-r">从文件恢复 ›</div></div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(this)">
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>数据</h2></div>
+      <div class="set-item" onclick="clearAll()"><div class="s-l">清空所有数据</div><div class="s-r" style="color:var(--clay)">危险 ›</div></div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>关于</h2></div>
+      <div class="set-item" onclick="go('about')"><div class="s-l">关于本软件</div><div class="s-r">版本信息、更新历史 ›</div></div>
+    </div>
+  `;
+}
+
+/* ---------- 数据概览：各模块记录数 + 查看每条记录 ---------- */
+window.openDataOverview=function(){
+  const mods=[
+    {key:'account',name:'账本记录',count:DB.accounts.transactions.length,icon:'\u{1F4D2}'},
+    {key:'habit',name:'习惯打卡',count:Object.keys(DB.habits.logs).length,icon:'\u2705'},
+    {key:'fitness',name:'身体记录',count:DB.fitness.records.length,icon:'\u2696\uFE0F'},
+    {key:'schedule',name:'日程事件',count:DB.schedule.events.length,icon:'\u{1F4C5}'},
+    {key:'shopping',name:'待买物品',count:DB.shopping.items.length,icon:'\u{1F6D2}'},
+    {key:'collection',name:'书影音收藏',count:DB.collection.items.length,icon:'\u{1F4DA}'}
+  ];
+  openSheet('数据概览',`
+    <div class="hist-intro">各模块的记录条数，点击查看每一条。</div>
+    ${mods.map(m=>`<div class="set-item" onclick="openModuleRecords('${m.key}')"><div class="s-l">${m.icon} ${m.name}</div><div class="s-r">${m.count} 条 ›</div></div>`).join('')}
+  `);
+};
+window.openModuleRecords=function(key){
+  const titles={account:'账本记录',habit:'习惯打卡',fitness:'身体记录',schedule:'日程事件',shopping:'待买物品',collection:'书影音收藏'};
+  let items='';
+  if(key==='account'){
+    items=DB.accounts.transactions.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.time||'').localeCompare(a.time||'')).map(x=>`<div class="set-item"><div class="s-l">${escapeHTML(x.note||x.category)} <span style="font-size:10px;color:var(--ink-3)">${x.date}${x.time?' '+x.time:''} · ${x.category}</span></div><div class="s-r" style="font-family:var(--serif);color:${x.type==='income'?'var(--moss)':'var(--ink)'}">${x.type==='income'?'+':'-'}¥${fmtMoney(x.amount)}</div></div>`).join('');
+  }else if(key==='habit'){
+    items=DB.habits.items.map(h=>{const log=DB.habits.logs[h.id]||{};return `<div class="set-item"><div class="s-l"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${h.color};margin-right:6px"></span>${escapeHTML(h.name)}</div><div class="s-r">${Object.keys(log).length} 天打卡</div></div>`;}).join('');
+  }else if(key==='fitness'){
+    items=DB.fitness.records.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<div class="set-item"><div class="s-l">${r.date}${r.note?` <span style="font-size:10px;color:var(--ink-3)">${escapeHTML(r.note)}</span>`:''}</div><div class="s-r" style="font-family:var(--serif)">${r.weight} kg</div></div>`).join('');
+  }else if(key==='schedule'){
+    items=DB.schedule.events.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<div class="set-item"><div class="s-l">${escapeHTML(e.title)} <span style="font-size:10px;color:var(--ink-3)">${e.date}${e.time?' '+e.time:''}</span></div><div class="s-r" style="color:${e.done?'var(--ink-3)':'var(--ink-2)'}">${e.done?'✓ 已完成':'未完成'}</div></div>`).join('');
+  }else if(key==='shopping'){
+    items=DB.shopping.items.map(s=>`<div class="set-item"><div class="s-l">${escapeHTML(s.name)}${s.boughtAt?` <span style="font-size:10px;color:var(--ink-3)">购于 ${s.boughtAt}</span>`:''}</div><div class="s-r" style="color:${s.bought?'var(--ink-3)':'var(--ink-2)'}">${s.bought?'已购':'未买'}</div></div>`).join('');
+  }else if(key==='collection'){
+    const labels={book:'书',movie:'影',music:'音'};
+    items=DB.collection.items.map(c=>`<div class="set-item"><div class="s-l">${escapeHTML(c.title)} <span style="font-size:10px;color:var(--ink-3)">${labels[c.type]||''}${c.status?' · '+escapeHTML(c.status):''}</span></div><div class="s-r">›</div></div>`).join('');
+  }
+  openSheet(titles[key], items||'<div class="empty-state" style="padding:24px"><div class="t">暂无记录</div></div>');
+};
+
+/* ---------- 关于页 ---------- */
+function renderAbout(){
+  const latest=APP_HISTORY[0];
+  $('#page-about').innerHTML=`
+    <div class="stat-banner">
+      <div class="sb-l">关于</div>
+      <div class="sb-v" style="font-family:var(--serif)">栖 · 生活工作台</div>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:4px">当前版本 v${latest?latest.ver:''}</div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>软件介绍</h2></div>
+      <div class="card">
+        <div style="font-size:13px;color:var(--ink-2);line-height:1.85">
+          一个安静的多功能工作台。<br>
+          集成记账、习惯、健身、日程、待买六大模块，<br>
+          离线运行，数据全部存于本机。
+        </div>
+        <div style="font-size:12px;color:var(--ink-3);line-height:1.8;margin-top:14px">
+          数据存储于 APP 私有目录，备份导出至 下载/QiFile/
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h2>更新历史</h2></div>
+      <div class="hist-intro">栖的演化轨迹，每一次打磨都让你的生活更顺手。</div>
+      ${APP_HISTORY.map((v,i,arr)=>{
+        const prev=arr[i+1];
+        return `
+          <div class="hist-item">
+            <div class="hist-top">
+              <span class="hist-ver">v${v.ver}</span>
+              <span class="hist-date">${v.date}</span>
+            </div>
+            <div class="hist-title">${v.title}</div>
+            ${v.notes?`<div class="hist-notes">${v.notes}</div>`:''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <button class="btn ghost block sm" style="margin-top:6px" onclick="go('settings')">返回设置</button>
+  `;
+}
+
+// 版本历史（新增于此）
+const APP_HISTORY=[
+  {ver:'1.0', date:'2026-08-05', title:'栖 · 生活工作台', notes:'一个安静的多功能生活工作台，集成记账、习惯、健身、日程、待买模块，记录生活的每一天。'}
+];
+window.handleImport=function(input){
+  if(input.files[0])importBackup(input.files[0]);
+  input.value='';
+};
+window.clearAll=function(){
+  confirmModal({
+    title:'清空所有数据',
+    body:'此操作不可恢复，所有记录将被永久删除。<br><br>建议先到上一项导出备份。',
+    confirmText:'清空',
+    danger:true,
+    requireSecond:true,
+    secondTitle:'最后确认',
+    secondBody:'点击下方按钮，数据将立即清空。',
+    secondConfirmText:'确认清空',
+    onConfirm:()=>{
+      DB=defaultData();saveData(true);renderAll();toast('已清空',1500);
+    }
+  });
+};
+
+/* ---------- 自定义模态确认框（替代原生 confirm，避免 WebView 「网址为…」标题） ---------- */
+function confirmModal(opts){
+  const backdrop=document.createElement('div');
+  backdrop.className='modal-backdrop';
+  const card=document.createElement('div');
+  card.className='modal-card';
+  card.setAttribute('role','dialog');
+  card.innerHTML=`
+    <div class="modal-title">${escapeHTML(opts.title||'请确认')}</div>
+    <div class="modal-body">${opts.body||''}</div>
+    <div class="modal-actions">
+      <button class="btn ghost sm cancel">${escapeHTML(opts.cancelText||'取消')}</button>
+      <button class="btn ${opts.danger?'clay':'moss'} sm confirm">${escapeHTML(opts.confirmText||'确定')}</button>
+    </div>
+  `;
+  backdrop.appendChild(card);
+  document.body.appendChild(backdrop);
+  // 触发动画
+  requestAnimationFrame(()=>backdrop.classList.add('show'));
+  const close=()=>{
+    backdrop.classList.remove('show');
+    setTimeout(()=>backdrop.remove(),200);
+  };
+  card.querySelector('.cancel').addEventListener('click',close);
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop)close();});
+  card.querySelector('.confirm').addEventListener('click',()=>{
+    if(opts.requireSecond){
+      close();
+      // 二次确认
+      setTimeout(()=>{
+        confirmModal({
+          title:opts.secondTitle||'再次确认',
+          body:opts.secondBody||'操作不可撤销。',
+          confirmText:opts.secondConfirmText||'仍然继续',
+          danger:true,
+          onConfirm:()=>{opts.onConfirm&&opts.onConfirm();}
+        });
+      },220);
+    }else{
+      close();
+      opts.onConfirm&&opts.onConfirm();
+    }
+  });
+}
+
+/* ---------- 事件绑定 ---------- */
+$$('.tab').forEach(t=>t.addEventListener('click',()=>go(t.dataset.page)));
+$('#btnSettings').addEventListener('click',()=>go('settings'));
+
+// 全局 FAB 动态显示
+let fabEl=null;
+function ensureFAB(){
+  if(!fabEl){
+    fabEl=document.createElement('button');
+    fabEl.className='fab';
+    fabEl.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    fabEl.addEventListener('click',onFAB);
+    $('#app').appendChild(fabEl);
+  }
+}
+function onFAB(){
+  const fabActions={
+    today:()=>window.openEventSheet(),
+    account:()=>window.openTxSheet(),
+    habit:()=>window.openHabitSheet(),
+    fitness:()=>window.openFitSheet(),
+    collection:()=>window.openCollSheet(),
+    schedule:()=>window.openEventSheet(),
+    shopping:()=>window.openShopSheet(),
+    settings:()=>{}
+  };
+  (fabActions[currentPage]||(()=>{}))();
+}
+function updateFAB(){
+  ensureFAB();
+  const show=['today','account','habit','fitness','collection','schedule','shopping'].includes(currentPage);
+  fabEl.style.display=show?'flex':'none';
+}
+const origGo=go;
+go=function(page){origGo(page);updateFAB();};
+
+/* ---------- 日程到点提醒（应用内） ---------- */
+function checkEventReminders(){
+  try{
+    const t=todayStr();
+    const now=nowTime();
+    if(!DB.meta.eventNotified)DB.meta.eventNotified={};
+    const due=[];
+    DB.schedule.events.forEach(e=>{
+      if(e.date===t&&!e.done&&e.time&&e.time<=now&&!DB.meta.eventNotified[e.id]){
+        DB.meta.eventNotified[e.id]=true;
+        due.push(e.title+' '+e.time);
+      }
+    });
+    if(due.length){
+      saveData(true);
+      toast('⏰ '+due.join('、'),4000);
+    }
+  }catch(e){}
+}
+
+/* ---------- 启动 ---------- */
+loadData();
+go('today');
+updateFAB();
+checkEventReminders();
+setInterval(checkEventReminders,60000);
+
+// 监听返回键（WebView）
+window.addEventListener('popstate',()=>{
+  if($('#sheet').classList.contains('show')){closeSheet();return;}
+  if(currentPage!=='today'){goBack();return;}
+});
+
+// ===== 把核心函数挂到 window，让 inline onclick 能找到 =====
+// 脚本被 IIFE 包裹，所有 function 声明只在该作用域内可见，
+// 而内联 onclick="xxx()" 在全局作用域查找 xxx，会报 ReferenceError。
+// 这里用一次扫描把当前作用域内所有具名函数自动挂到 window，
+// 以后再写新 function xxx() 也能默认暴露。
+(function exposeForOnclick(){
+  const fns=[go,closeSheet,exportBackup,calcBMI,calcDailyDeficit,calcETA,calcGoalPct,renderWeightChart,renderDonut,renderMonthCompare,renderToday,renderAccount,renderFitness,renderHabit,renderSchedule,renderShopping,renderCollection,renderSettings,renderPage,renderAll,onFAB,ensureFAB,updateFAB,openSheet,toast,saveData,defaultData,loadData,checkBackupReminder,safeGetItem,safeSetItem,importBackup,deepMerge,shade,triggerDownload];
+  for(const f of fns){
+    if(f&&f.name&&typeof window[f.name]==='undefined'){try{window[f.name]=f;}catch(e){}}
+  }
+})();
+
+})();
+</script>
+</body>
+</html>
