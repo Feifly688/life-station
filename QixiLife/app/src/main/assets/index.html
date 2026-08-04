@@ -667,10 +667,12 @@ function triggerDownload(filename, content, mime){
 function exportBackup(){
   try{
     const json=JSON.stringify(DB,null,2);
-    triggerDownload(`qixi-backup-${todayStr()}.json`, json, 'application/json');
+    // 固定文件名：最新备份覆盖历史备份
+    triggerDownload('qixi-backup.json', json, 'application/json');
     DB.meta.lastBackup=new Date().toISOString();
     DB.meta.lastBackupCount=countEntries();
     saveData(true);
+    if(currentPage==='settings')renderSettings();
     toast('备份已导出',1500);
   }catch(e){toast('导出失败',1500);}
 }
@@ -1316,13 +1318,15 @@ function renderHabit(){
           else{const p=h.target?v/h.target:0;lvl=p>=1?4:p>=0.75?3:p>=0.5?2:p>0?1:0;}
           heat.push(`<div class="h l${lvl}" title="${ds}: ${v}"></div>`);
         }
-        // 连续天数
+        // 连续天数（今天还没打卡不算断档，从昨天起算）
         let streak=0;
         for(let i=0;i<30;i++){
           const ds=daysAgoStr(i);
           const v=log[ds]||0;
           const ok=h.type==='check'?v>=1:v>0;
-          if(ok)streak++;else break;
+          if(ok){streak++;continue;}
+          if(i===0)continue;
+          break;
         }
         return `<div class="habit-item">
           <div class="hi-top">
@@ -1984,7 +1988,7 @@ window.openModuleRecords=function(key){
   if(key==='account'){
     items=DB.accounts.transactions.slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.time||'').localeCompare(a.time||'')).map(x=>`<div class="set-item"><div class="s-l">${escapeHTML(x.note||x.category)} <span style="font-size:10px;color:var(--ink-3)">${x.date}${x.time?' '+x.time:''} · ${x.category}</span></div><div class="s-r" style="font-family:var(--serif);color:${x.type==='income'?'var(--moss)':'var(--ink)'}">${x.type==='income'?'+':'-'}¥${fmtMoney(x.amount)}</div></div>`).join('');
   }else if(key==='habit'){
-    items=DB.habits.items.map(h=>{const log=DB.habits.logs[h.id]||{};return `<div class="set-item"><div class="s-l"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${h.color};margin-right:6px"></span>${escapeHTML(h.name)}</div><div class="s-r">${Object.keys(log).length} 天打卡</div></div>`;}).join('');
+    items=DB.habits.items.map(h=>{const log=DB.habits.logs[h.id]||{};let st=0;for(let i=0;i<365;i++){const ds=daysAgoStr(i);const v=log[ds]||0;if(v>0){st++;continue;}if(i===0)continue;break;}return `<div class="set-item"><div class="s-l"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${h.color};margin-right:6px"></span>${escapeHTML(h.name)}</div><div class="s-r">${Object.keys(log).length} 天 · 连续 ${st} 天</div></div>`;}).join('');
   }else if(key==='fitness'){
     items=DB.fitness.records.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<div class="set-item"><div class="s-l">${r.date}${r.note?` <span style="font-size:10px;color:var(--ink-3)">${escapeHTML(r.note)}</span>`:''}</div><div class="s-r" style="font-family:var(--serif)">${r.weight} kg</div></div>`).join('');
   }else if(key==='schedule'){
@@ -2043,6 +2047,7 @@ function renderAbout(){
 
 // 版本历史（新增于此）
 const APP_HISTORY=[
+  {ver:'1.1', date:'2026-08-05', title:'修复：连续打卡与备份', notes:'连续打卡天数修复（今天未打卡不再断档）；导出备份后立即刷新上次备份时间；备份文件固定 qixi-backup.json，最新备份覆盖历史备份。'},
   {ver:'1.0', date:'2026-08-05', title:'栖 · 生活工作台', notes:'一个安静的多功能生活工作台，集成记账、习惯、健身、日程、待买模块，记录生活的每一天。'}
 ];
 window.handleImport=function(input){
