@@ -56,11 +56,18 @@ FeiQi/
 
 <br>
 
-## 分支说明
+## 分支与发布
 
-| 分支 | 内容 |
+本项目采用**单一分支 + Releases** 的发布方式：
+
+| 位置 | 内容 |
 | --- | --- |
-| `main` | 项目源代码（不含构建产物） |
-| `release` | 只存放 APK 构建产物（`翡栖-vX.Y.Z.apk`） |
+| `main` 分支 | 项目源代码（不含任何构建产物） |
+| **Releases** | 每个版本的 APK 安装包，见右侧 Releases 页 |
+
+**获取最新 APK**：打开本仓库的 [Releases](../../releases/latest) 页面，下载 `feiqi-vX.Y.Z.apk` 安装即可。
+
+> 说明：GitHub 会过滤 Release 附件名中的非 ASCII 字符，故 APK 附件使用 ASCII 文件名
+> `feiqi-vX.Y.Z.apk`，而 Release 标题仍为中文「翡栖 vX.Y.Z」。
 
 仓库根目录另附各功能页参考图。本项目为**个人自用 App**，非商业用途。
