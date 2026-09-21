@@ -73,7 +73,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.3.1</string>
+    <string name="version_value">v1.4.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -181,6 +181,16 @@
     <string name="view_month">月</string>
     <string name="view_year">年</string>
     <string name="weight_curve_empty">该视图下暂无数据</string>
+
+    <!-- 内容更新（语录集） -->
+    <string name="content_update">内容</string>
+    <string name="quote_update_title">语录集</string>
+    <string name="quote_update_action">立即更新</string>
+    <string name="quote_updating">更新中…</string>
+    <string name="quote_source_remote">已联网更新 %1$d 条 · %2$s</string>
+    <string name="quote_source_cache">本地缓存 %1$d 条 · %2$s</string>
+    <string name="quote_source_builtin">内置语录 %1$d 条 · 尚未联网更新</string>
+    <string name="quote_update_failed">上次更新失败：%1$s</string>
 
     <!-- 购物清单 -->
     <string name="shopping_list">购买物品</string>

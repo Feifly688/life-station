@@ -26,5 +26,7 @@ data class HomeUiState(
     /** 购买物品：已买。 */
     val shoppingBought: List<ShoppingItem> = emptyList(),
     val recentRecords: List<AccountRecord> = emptyList(),
-    val quote: String = "今天，慢慢来。"
+    val quote: String = "今天，慢慢来。",
+    /** 语录作者（内置语录没有作者，远程语录集可能提供）。 */
+    val quoteAuthor: String? = null
 )

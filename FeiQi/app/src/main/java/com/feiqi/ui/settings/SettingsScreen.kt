@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +53,11 @@ import android.Manifest
 import android.os.Build
 import com.feiqi.R
 import com.feiqi.ui.components.ConfirmDialog
+import com.feiqi.data.repository.QuoteSource
+import com.feiqi.ui.theme.ExpenseRed
+import com.feiqi.utils.DateUtils
+import java.time.Instant
+import java.time.ZoneId
 import com.feiqi.ui.theme.OnPrimary
 import com.feiqi.ui.theme.Primary
 import com.feiqi.utils.NotificationUtils
@@ -63,6 +69,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val quoteState by viewModel.quoteState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showClearDialog by remember { mutableStateOf(false) }
 
@@ -158,6 +165,18 @@ fun SettingsScreen(
                     exactAlarmGranted = exactAlarmGranted,
                     onOpenExactAlarmSettings = { NotificationUtils.openExactAlarmSettings(context) },
                     onOpenAppDetails = { NotificationUtils.openAppDetails(context) }
+                )
+            }
+
+            item {
+                SectionTitle(stringResource(R.string.content_update))
+                QuoteSourceCard(
+                    quoteCount = quoteState.quotes.size,
+                    source = quoteState.source,
+                    updatedAt = quoteState.updatedAt,
+                    refreshing = quoteState.refreshing,
+                    lastError = quoteState.lastError,
+                    onRefresh = { viewModel.refreshQuotes() }
                 )
             }
 
@@ -439,6 +458,81 @@ private fun GuideRow(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary
         )
+    }
+}
+
+@Composable
+private fun QuoteSourceCard(
+    quoteCount: Int,
+    source: QuoteSource,
+    updatedAt: Long,
+    refreshing: Boolean,
+    lastError: String?,
+    onRefresh: () -> Unit
+) {
+    // 最近一次成功更新的日期（M月d日）；从未成功过则为 null。
+    val updatedDate = updatedAt
+        .takeIf { it > 0L }
+        ?.let { DateUtils.monthDay(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()) }
+
+    val statusText = when {
+        source == QuoteSource.REMOTE ->
+            stringResource(R.string.quote_source_remote, quoteCount, updatedDate.orEmpty())
+        source == QuoteSource.CACHE ->
+            stringResource(R.string.quote_source_cache, quoteCount, updatedDate.orEmpty())
+        else ->
+            stringResource(R.string.quote_source_builtin, quoteCount)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.quote_update_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (refreshing) stringResource(R.string.quote_updating) else statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    // 失败时额外说明原因，成功状态下不显示（不打扰）。
+                    if (lastError != null && !refreshing) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.quote_update_failed, lastError),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = ExpenseRed
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(onClick = onRefresh, enabled = !refreshing) {
+                    Text(
+                        text = stringResource(R.string.quote_update_action),
+                        color = if (refreshing) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            Primary
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 

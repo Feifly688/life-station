@@ -357,7 +357,7 @@ fun HomeScreen(
 
         item {
             Spacer(modifier = Modifier.height(24.dp))
-            QuoteCard(quote = uiState.quote)
+            QuoteCard(quote = uiState.quote, author = uiState.quoteAuthor)
         }
         }
 
@@ -505,7 +505,7 @@ private fun StatCard(
 }
 
 @Composable
-private fun QuoteCard(quote: String, modifier: Modifier = Modifier) {
+private fun QuoteCard(quote: String, author: String? = null, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -516,11 +516,23 @@ private fun QuoteCard(quote: String, modifier: Modifier = Modifier) {
             .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp))
             .padding(20.dp)
     ) {
-        Text(
-            text = quote,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Column {
+            Text(
+                text = quote,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            // 作者可选：内置语录没有作者，远程语录集提供时右对齐显示一行。
+            if (!author.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "—— $author",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.End)
+                )
+            }
+        }
     }
 }
 

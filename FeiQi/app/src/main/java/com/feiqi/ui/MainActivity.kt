@@ -68,7 +68,8 @@ class MainActivity : ComponentActivity() {
                                     container.accountRepository,
                                     container.scheduleRepository,
                                     container.preferencesRepository,
-                                    container.mediaRepository
+                                    container.mediaRepository,
+                                    container.quoteRepository
                                 ) as T
                             }
                         }
@@ -119,7 +120,8 @@ class MainActivity : ComponentActivity() {
                                 return SettingsViewModel(
                                     container.accountRepository,
                                     container.preferencesRepository,
-                                    container.backupManager
+                                    container.backupManager,
+                                    container.quoteRepository
                                 ) as T
                             }
                         }

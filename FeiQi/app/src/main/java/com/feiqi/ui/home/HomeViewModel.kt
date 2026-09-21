@@ -12,9 +12,10 @@ import com.feiqi.data.model.ShoppingItem
 import com.feiqi.data.repository.AccountRepository
 import com.feiqi.data.repository.MediaRepository
 import com.feiqi.data.repository.PreferencesRepository
+import com.feiqi.data.repository.QuoteRepository
+import com.feiqi.data.repository.QuoteState
 import com.feiqi.data.repository.ScheduleRepository
 import com.feiqi.utils.DateUtils
-import com.feiqi.utils.Quotes
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,7 +32,8 @@ class HomeViewModel(
     private val accountRepository: AccountRepository,
     private val scheduleRepository: ScheduleRepository,
     private val preferencesRepository: PreferencesRepository,
-    private val mediaRepository: MediaRepository
+    private val mediaRepository: MediaRepository,
+    private val quoteRepository: QuoteRepository
 ) : ViewModel() {
 
     private val today = DateUtils.today()
@@ -49,6 +51,8 @@ class HomeViewModel(
     private val allSchedules = scheduleRepository.getAll()
     private val shoppingItems = preferencesRepository.shoppingItems
     private val recentMedia = mediaRepository.getRecent(4)
+    // 语录集（内置 / 本地缓存 / 远程）：状态变化时首页自动刷新当天语录。
+    private val quoteState = quoteRepository.state
 
     val uiState: StateFlow<HomeUiState> = combine(
         recentRecords,
@@ -59,7 +63,8 @@ class HomeViewModel(
         latestWeight,
         allSchedules,
         shoppingItems,
-        recentMedia
+        recentMedia,
+        quoteState
     ) { arrays ->
         val records = arrays[0] as List<*>
         val expense = arrays[1] as Double
@@ -74,6 +79,8 @@ class HomeViewModel(
         val shopping = arrays[7] as List<ShoppingItem>
         @Suppress("UNCHECKED_CAST")
         val media = arrays[8] as List<Media>
+        val quoteSet = arrays[9] as QuoteState
+        val dailyQuote = quoteSet.daily(today)
 
         val used = if (budgetValue > 0) (expense / budgetValue).toFloat().coerceIn(0f, 1f) else 0f
         val todayItems = buildTodayItems(schedules, today)
@@ -101,7 +108,8 @@ class HomeViewModel(
             shoppingBought = shopping.filter { it.bought }
                 .sortedByDescending { it.boughtAt ?: it.createdAt },
             recentRecords = records.filterIsInstance<com.feiqi.data.model.AccountRecord>(),
-            quote = Quotes.daily(today).text
+            quote = dailyQuote.text,
+            quoteAuthor = dailyQuote.author
         )
     }.stateIn(
         scope = viewModelScope,

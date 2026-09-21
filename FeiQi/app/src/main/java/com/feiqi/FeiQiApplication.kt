@@ -8,6 +8,7 @@ import com.feiqi.data.repository.AccountRepository
 import com.feiqi.data.repository.HabitRepository
 import com.feiqi.data.repository.MediaRepository
 import com.feiqi.data.repository.PreferencesRepository
+import com.feiqi.data.repository.QuoteRepository
 import com.feiqi.data.repository.ScheduleCompletionRepository
 import com.feiqi.data.repository.ScheduleRepository
 import com.feiqi.utils.BackupManager
@@ -34,6 +35,20 @@ class FeiQiApplication : Application() {
         container = AppContainer(this)
         NotificationUtils.createChannel(this)
         restoreReminders()
+        syncQuotes()
+    }
+
+    /**
+     * 语录集：先载入本地缓存保证首页立刻有内容，再按更新周期（默认 7 天）静默联网更新。
+     * 全程在 IO 线程、失败不打扰用户（保持缓存/内置语录），仅记录到日志与设置页状态。
+     */
+    private fun syncQuotes() {
+        appScope.launch {
+            runCatching {
+                container.quoteRepository.loadCache()
+                container.quoteRepository.refresh(force = false)
+            }.onFailure { AppLogger.e("QuoteSync", "语录集同步失败", it) }
+        }
     }
 
     /**
@@ -100,4 +115,5 @@ class AppContainer(context: Context) {
     val backupManager = BackupManager(appContext)
     val excelExporter = ExcelExporter(appContext)
     val reminderScheduler = ReminderScheduler(appContext)
+    val quoteRepository = QuoteRepository(appContext)
 }

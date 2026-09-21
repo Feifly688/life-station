@@ -1,16 +1,20 @@
 package com.feiqi.utils
 
+import com.feiqi.data.model.Quote
 import java.time.LocalDate
 
 /**
- * 本地励志语录库。
- * 按日期取模轮换，每天展示一条，不依赖网络和服务器。
+ * 内置语录库（**离线兜底**）。
+ *
+ * - 语料以 [Quote] 字面量硬编码在此，不依赖网络：远程语录集不可用时永远有内容可展示。
+ * - 历史上同一句被重复录入过（如「愿你历尽千帆，归来仍是少年。」出现 3 次），
+ *   [builtIn] 在初始化时按文本去重，避免重复条目让某几句的展示频率异常偏高。
+ * - 展示规则：按「日期取模」轮换——同一天始终同一条，跨零点自然切换。
  */
 object Quotes {
 
-    data class Quote(val text: String, val author: String? = null)
-
-    private val list = listOf(
+    /** 原始语料（保留历史重复项，仅作数据源）。 */
+    private val raw = listOf(
         Quote("规律不是把每天塞满，而是知道什么值得留下。"),
         Quote("慢慢来，比较快。"),
         Quote("完成一点，就算前进。"),
@@ -174,9 +178,16 @@ object Quotes {
         Quote("愿你历尽山河，觉得人间值得。")
     )
 
-    fun daily(seed: LocalDate = LocalDate.now()): Quote {
-        if (list.isEmpty()) return Quote("今天，慢慢来。")
-        val index = (seed.toEpochDay() % list.size).toInt()
-        return list[index]
+    /** 去重后的内置语录（离线兜底集合）。 */
+    val builtIn: List<Quote> = raw.distinctBy { it.text }
+
+    /**
+     * 按日期取模轮换取一条。
+     * @param from 要轮换的集合；默认内置语录，可传入远程语录集。
+     */
+    fun daily(seed: LocalDate = LocalDate.now(), from: List<Quote> = builtIn): Quote {
+        if (from.isEmpty()) return Quote("今天，慢慢来。")
+        // 用 mod 而非 %：% 在负数（1970 年之前）下会得到负索引导致越界。
+        return from[seed.toEpochDay().mod(from.size.toLong()).toInt()]
     }
 }
