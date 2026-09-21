@@ -259,6 +259,9 @@ internal fun ItemEditDialog(
                 reminderEnabled = true
                 recurrence = pickedRecurrence
                 showReminderDialog = false
+                // 提醒设置完成后直接保存并关闭本浮层：单条待办的编辑目的通常就是「顺手设个提醒」，
+                // 若只关掉提醒弹窗、把待办浮层留在屏幕下半部分，会被当成「卡住没关闭」。
+                saveAndDismiss()
             }
         )
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -165,21 +166,26 @@ fun ReminderSettingDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 重复提醒：右侧为下拉框，点击展开六个选项（不重复 / 每天 / 周一至周五 / 每周 / 每月 / 每年）
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { repeatMenuExpanded = true }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.repeat_reminder),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { repeatMenuExpanded = true }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.repeat_reminder),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    // 菜单锚点：Box 只包住右侧「当前值 + 箭头」触发区，并给同样的最小宽度，
+                    // 使 DropdownMenu 恰好从触发按钮**正下方**展开（此前锚在整行上，菜单会贴卡片左缘）。
+                    Box(modifier = Modifier.widthIn(min = 140.dp)) {
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 text = recurrenceLabel(recurrence),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -195,28 +201,29 @@ fun ReminderSettingDialog(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                    DropdownMenu(
-                        expanded = repeatMenuExpanded,
-                        onDismissRequest = { repeatMenuExpanded = false }
-                    ) {
-                        recurrenceOptions.forEach { option ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = recurrenceLabel(option),
-                                        color = if (option == recurrence) {
-                                            Primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                },
-                                onClick = {
-                                    recurrence = option
-                                    repeatMenuExpanded = false
-                                }
-                            )
+                        DropdownMenu(
+                            expanded = repeatMenuExpanded,
+                            onDismissRequest = { repeatMenuExpanded = false },
+                            modifier = Modifier.widthIn(min = 140.dp)
+                        ) {
+                            recurrenceOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = recurrenceLabel(option),
+                                            color = if (option == recurrence) {
+                                                Primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    },
+                                    onClick = {
+                                        recurrence = option
+                                        repeatMenuExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }

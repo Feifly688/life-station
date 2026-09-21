@@ -214,9 +214,14 @@ class ScheduleViewModel(
     fun toggleComplete(schedule: Schedule) {
         val markCompleted = !schedule.completed
         val today = DateUtils.today()
+        // 单条「已设提醒 + 重复」待办：完成时**本条转为完成记录**（不再循环、进已完成列表），
+        // 同时新增一条内容相同的副本按重复规则顺延，继续提醒。
+        val repeatingSingle = schedule.listId == null && schedule.reminder && schedule.isRecurring
         val updated = schedule.copy(
             completed = markCompleted,
-            completedDate = if (markCompleted) today else null
+            completedDate = if (markCompleted) today else null,
+            // 完成记录不再循环（由副本负责继续），与「清单完成快照」的口径保持一致。
+            recurrence = if (markCompleted && repeatingSingle) Recurrence.NONE else schedule.recurrence
         )
         viewModelScope.launch {
             runCatching {
@@ -246,12 +251,43 @@ class ScheduleViewModel(
                             repository.updateBatch(group.map { it.copy(completedDate = null) })
                         }
                     }
+                } else if (markCompleted && repeatingSingle) {
+                    // 本条 update 已把完成记录写入已完成区；这里取消它的闹钟，
+                    // 再新增一条内容相同的副本（按重复规则顺延提醒时间）继续循环。
+                    reminderScheduler.cancel(updated.id)
+                    val nextDate = nextRecurringDate(schedule)
+                    val successor = schedule.copy(
+                        id = 0, // 让 Room autoGenerate 新 id
+                        date = nextDate,
+                        completed = false,
+                        completedDate = null,
+                        lastResetDate = null,
+                        createdAt = System.currentTimeMillis()
+                    )
+                    val newId = repository.insert(successor)
+                    if (newId > 0) reminderScheduler.schedule(successor.copy(id = newId))
+                    _events.emit(nextReminderTip(nextDate, schedule.time))
                 } else {
                     reminderScheduler.schedule(updated)
                 }
             }.onFailure {
                 _events.emit("更新失败：${it.message}")
             }
+        }
+    }
+
+    /**
+     * 单条循环待办完成后，副本的应提醒日。
+     * 常规情况即「按规则顺延」（每天 = +1 天、每周 = +7 天…）；逾期多日时 nextOccurrence 可能
+     * 仍早于今天，此时按启动补推的口径落到今天，避免副本一出生就是逾期状态。
+     */
+    private fun nextRecurringDate(schedule: Schedule): LocalDate {
+        val today = DateUtils.today()
+        val next = RecurrenceUtils.nextOccurrence(schedule.date, schedule.recurrence)
+        return if (next < today) {
+            RecurrenceUtils.advanceToOnOrAfter(schedule.date, schedule.recurrence, today)
+        } else {
+            next
         }
     }
 
