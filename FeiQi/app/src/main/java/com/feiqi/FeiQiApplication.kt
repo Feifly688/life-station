@@ -50,13 +50,13 @@ class FeiQiApplication : Application() {
                 val today = com.feiqi.utils.DateUtils.today()
                 val schedules = repo.getAll().first()
                 // 过期循环清单：date < today 的，顺延到今天（只顺延到当天，不无脑推到未来）。
-                val adjusted = schedules.map { s ->
-                    if (s.isRecurring && s.reminder && !s.completed && s.date < today) {
-                        val updated = s.copy(date = today, lastResetDate = null)
-                        repo.update(updated)
-                        updated
-                    } else s
-                }
+                val advanced = schedules
+                    .filter { it.isRecurring && it.reminder && !it.completed && it.date < today }
+                    .map { it.copy(date = today, lastResetDate = null) }
+                // 批量写回：整体收敛到一个事务（原本逐条 update 会各开一次事务）。
+                repo.updateBatch(advanced)
+                val advancedById = advanced.associateBy { it.id }
+                val adjusted = schedules.map { advancedById[it.id] ?: it }
                 container.reminderScheduler.rescheduleAll(adjusted)
                 AppLogger.i("ReminderRestore", "启动重排提醒完成，共 ${adjusted.size} 条")
             }.onFailure { AppLogger.e("ReminderRestore", "启动重排提醒失败", it) }

@@ -36,7 +36,8 @@ class ScheduleRepository(private val dao: ScheduleDao) {
     }
 
     suspend fun insertBatch(schedules: List<Schedule>): List<Long> {
-        return schedules.map { dao.insert(it.toEntity()) }
+        if (schedules.isEmpty()) return emptyList()
+        return dao.insertAll(schedules.map { it.toEntity() })
     }
 
     suspend fun update(schedule: Schedule) {
@@ -44,7 +45,13 @@ class ScheduleRepository(private val dao: ScheduleDao) {
     }
 
     suspend fun updateBatch(schedules: List<Schedule>) {
-        schedules.forEach { dao.update(it.toEntity()) }
+        if (schedules.isEmpty()) return
+        dao.updateAll(schedules.map { it.toEntity() })
+    }
+
+    /** 提醒触发时取清单内未完成项（定向查询，避免全表加载）。 */
+    suspend fun getPendingByListId(listId: String): List<Schedule> {
+        return dao.getPendingByListId(listId).map { it.toModel() }
     }
 
     suspend fun delete(schedule: Schedule) {
