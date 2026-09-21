@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.feiqi.R
@@ -122,7 +123,11 @@ fun ReminderSettingDialog(
                     Text(
                         text = stringResource(R.string.reminder_time),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        // 标题让位给右侧两个日期/时间胶囊：字体放大时标题省略，胶囊不被挤出屏幕。
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         DateTimeChip(
@@ -492,23 +497,24 @@ private fun DateWheelPicker(
                 initialIndex = years.indexOf(selectedYear).coerceAtLeast(0),
                 onIndexChanged = { selectedYear = years[it] },
                 suffix = "年",
-                modifier = Modifier.width(90.dp)
+                // 用 weight 自适应剩余宽度（原为固定 90dp）：小屏 + 卡片内边距下三列固定宽度会溢出。
+                modifier = Modifier.weight(1.15f)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             WheelColumn(
                 items = months.map { "%02d".format(it) },
                 initialIndex = selectedMonth - 1,
                 onIndexChanged = { selectedMonth = it + 1 },
                 suffix = "月",
-                modifier = Modifier.width(70.dp)
+                modifier = Modifier.weight(1f)
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             WheelColumn(
                 items = (1..daysInMonth).map { "%02d".format(it) },
                 initialIndex = (selectedDay - 1).coerceIn(0, daysInMonth - 1),
                 onIndexChanged = { selectedDay = it + 1 },
                 suffix = "日",
-                modifier = Modifier.width(70.dp)
+                modifier = Modifier.weight(1f)
             )
         }
     }

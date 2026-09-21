@@ -81,9 +81,17 @@ fun SettingsScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let {
-            context.contentResolver.openInputStream(it)?.use { input ->
-                val json = input.readBytes().toString(Charsets.UTF_8)
+        uri?.let { picked ->
+            // 读文件会抛 SecurityException / IOException（URI 失效、被回收、文件损坏），
+            // 必须兜住：否则备份导入直接闪退。
+            val json = runCatching {
+                context.contentResolver.openInputStream(picked)?.use { input ->
+                    input.readBytes().toString(Charsets.UTF_8)
+                }
+            }.getOrNull()
+            if (json.isNullOrBlank()) {
+                Toast.makeText(context, "无法读取该文件，请重新选择", Toast.LENGTH_SHORT).show()
+            } else {
                 viewModel.importData(json)
             }
         }

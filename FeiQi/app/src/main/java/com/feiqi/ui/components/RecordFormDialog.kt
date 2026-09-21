@@ -43,7 +43,9 @@ fun RecordFormDialog(
     onSave: (AccountType, String, String, LocalDateTime, String) -> Unit
 ) {
     var type by remember(record) { mutableStateOf(record?.type ?: AccountType.EXPENSE) }
-    var amount by remember(record) { mutableStateOf(record?.amount?.let { "%.2f".format(it) } ?: "") }
+    var amount by remember(record) {
+        mutableStateOf(record?.amount?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "")
+    }
     var category by remember(record) {
         mutableStateOf(record?.category ?: DEFAULT_EXPENSE_CATEGORIES.first())
     }

@@ -85,8 +85,8 @@ class HealthViewModel(
             viewModelScope.launch { _events.emit("请输入合理的身高（50-260cm）") }
             return
         }
-        if (age > 0 && age > 130) {
-            viewModelScope.launch { _events.emit("请输入合理的年龄") }
+        if (age < 0 || age > 130) {
+            viewModelScope.launch { _events.emit("请输入合理的年龄（0-130）") }
             return
         }
         viewModelScope.launch {

@@ -135,14 +135,16 @@ fun MediaScreen(
                 .padding(innerPadding),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            // 补上水平内边距：此前只有 bottom，两侧作品卡直接贴屏幕边缘，与同页其它区块的 16dp 不一致。
+            // 相应地，下面各跨列区块（标题/表单/统计/足迹/收藏）都不再自带 16dp 水平内边距，避免翻倍。
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)
         ) {
             item(span = { GridItemSpan(2) }) {
                 Text(
                     text = stringResource(R.string.tab_media),
                     style = MaterialTheme.typography.headlineLarge,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
             }
 
@@ -170,7 +172,7 @@ fun MediaScreen(
             }
 
             item(span = { GridItemSpan(2) }) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                Column {
                     Text(
                         text = stringResource(R.string.media_collection),
                         style = MaterialTheme.typography.titleMedium,
@@ -234,7 +236,11 @@ fun MediaScreen(
     editingMedia?.let { media ->
         EditMediaDialog(
             media = media,
-            onUpdate = { viewModel.updateMedia(it) },
+            onUpdate = {
+                viewModel.updateMedia(it)
+                // 保存后必须关闭弹窗：否则编辑框会一直浮在屏幕上（用户以为没保存成功）。
+                editingMedia = null
+            },
             onDismiss = { editingMedia = null }
         )
     }
@@ -254,8 +260,7 @@ private fun AddMediaForm(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(20.dp)
@@ -300,13 +305,19 @@ private fun MediaFormBody(
         coverUri: String?
     ) -> Unit
 ) {
-    var title by remember { mutableStateOf(initialMedia?.title ?: "") }
-    var type by remember { mutableStateOf(initialMedia?.type?.label ?: MediaType.MOVIE.label) }
-    var status by remember { mutableStateOf(initialMedia?.status?.label ?: MediaStatus.WISH.label) }
-    var rating by remember { mutableFloatStateOf(initialMedia?.rating ?: 0f) }
-    var date by remember { mutableStateOf(initialMedia?.date ?: DateUtils.today()) }
-    var note by remember { mutableStateOf(initialMedia?.note ?: "") }
-    var coverUri by remember { mutableStateOf(initialMedia?.coverUri ?: "") }
+    // 表单初值按 initialMedia 建 key：同一处组合位置若换了编辑对象（或从"新增"切到"编辑"），
+    // 无 key 的 remember 会沿用上一份数据，导致表单显示错的内容。
+    var title by remember(initialMedia) { mutableStateOf(initialMedia?.title ?: "") }
+    var type by remember(initialMedia) {
+        mutableStateOf(initialMedia?.type?.label ?: MediaType.MOVIE.label)
+    }
+    var status by remember(initialMedia) {
+        mutableStateOf(initialMedia?.status?.label ?: MediaStatus.WISH.label)
+    }
+    var rating by remember(initialMedia) { mutableFloatStateOf(initialMedia?.rating ?: 0f) }
+    var date by remember(initialMedia) { mutableStateOf(initialMedia?.date ?: DateUtils.today()) }
+    var note by remember(initialMedia) { mutableStateOf(initialMedia?.note ?: "") }
+    var coverUri by remember(initialMedia) { mutableStateOf(initialMedia?.coverUri ?: "") }
 
     val context = LocalContext.current
     // 自行上传封面：从相册/文件选一张图，复制到 App 私有目录后存本地路径，不依赖任何外部图片库。
@@ -626,8 +637,7 @@ private fun StatsRow(
 ) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         StatCard(
@@ -688,8 +698,7 @@ private fun FootprintCard(
 ) {
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Primary),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(20.dp)

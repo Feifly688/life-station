@@ -60,7 +60,11 @@ fun AccountListItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            // weight(1f)：左侧信息占用剩余宽度并在超长时省略，不再把右侧金额挤出屏幕。
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
@@ -75,11 +79,13 @@ fun AccountListItem(
                 )
             }
             Spacer(modifier = Modifier.width(12.dp))
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = record.category,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 val subtitle = buildString {
                     append(DateUtils.hms(record.time))
@@ -100,7 +106,8 @@ fun AccountListItem(
         Text(
             text = "$sign¥${decimal.format(record.amount)}",
             style = MaterialTheme.typography.titleMedium,
-            color = amountColor
+            color = amountColor,
+            maxLines = 1
         )
     }
 }

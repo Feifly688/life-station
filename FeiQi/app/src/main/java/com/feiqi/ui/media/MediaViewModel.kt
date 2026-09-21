@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -41,7 +42,10 @@ class MediaViewModel(private val repository: MediaRepository) : ViewModel() {
         } else 0f
 
         val typeCounts = items.groupingBy { it.type }.eachCount()
-        val favorite = typeCounts.maxByOrNull { it.value }?.key?.label ?: "-"
+        // 并列时按枚举顺序取靠前者：否则「最爱类型」会随记录插入顺序变化，同一份数据两次打开可能不一样。
+        val favorite = typeCounts.entries
+            .maxWithOrNull(compareBy({ it.value }, { -it.key.ordinal }))
+            ?.key?.label ?: "-"
 
         val distribution = MutableList(5) { 0 }
         ratedItems.forEach { media ->
@@ -117,16 +121,33 @@ class MediaViewModel(private val repository: MediaRepository) : ViewModel() {
     fun deleteMedia(media: Media) {
         viewModelScope.launch {
             runCatching { repository.delete(media) }
-                .onSuccess { _events.emit("已删除") }
+                .onSuccess {
+                    // 顺手清掉本地封面副本：否则 App 私有目录里的图片会越攒越多（单张可达数 MB）。
+                    deleteCoverFile(media.coverUri)
+                    _events.emit("已删除")
+                }
                 .onFailure { _events.emit("删除失败：${it.message}") }
         }
     }
 
     fun updateMedia(media: Media) {
         viewModelScope.launch {
-            runCatching { repository.update(media) }
+            runCatching {
+                val previous = repository.getAll().first().firstOrNull { it.id == media.id }
+                repository.update(media)
+                // 换了封面 → 删掉旧文件；未换（路径相同或为空）则不动。
+                if (previous != null && previous.coverUri != media.coverUri) {
+                    deleteCoverFile(previous.coverUri)
+                }
+            }
                 .onSuccess { _events.emit("已更新") }
                 .onFailure { _events.emit("更新失败：${it.message}") }
         }
+    }
+
+    /** 删除封面文件；路径为空、文件不存在或删除失败时静默忽略（不影响主流程）。 */
+    private fun deleteCoverFile(path: String?) {
+        val normalized = path?.takeIf { it.isNotBlank() } ?: return
+        runCatching { java.io.File(normalized).delete() }
     }
 }

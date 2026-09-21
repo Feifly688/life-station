@@ -72,7 +72,7 @@ class ExcelExporter(private val context: Context) {
                 DateUtils.hms(it.dateTime.toLocalTime()),
                 if (it.type == AccountType.INCOME) "收入" else "支出",
                 it.category,
-                String.format("%.2f", it.amount),
+                String.format(Locale.US, "%.2f", it.amount),
                 it.note
             )
         }

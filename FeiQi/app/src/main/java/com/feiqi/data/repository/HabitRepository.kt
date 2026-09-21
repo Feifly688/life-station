@@ -21,10 +21,21 @@ class HabitRepository(
     private val recordDao: HabitRecordDao
 ) {
 
-    /** 所有习惯 + 近 30 天记录，按 sortOrder 排序。 */
+    companion object {
+        /** 连续天数所需的历史回溯窗口（天）。 */
+        private const val STREAK_WINDOW_DAYS = 400L
+    }
+
+    /**
+     * 所有习惯 + 记录窗口，按 sortOrder 排序。
+     *
+     * 记录窗口取近 [STREAK_WINDOW_DAYS] 天（而非 30 天）：连续天数（streak）可能远超 30 天，
+     * 若只取 30 天，`computeStreak` 会在窗口边界被 0 值截断，把「连续 87 天」误报成「连续 30 天」。
+     * 完成率与热力图都按各自的具体日期取数（见 [computeLast30Rate]），窗口变长不影响其结果。
+     */
     fun getHabitsWithRecords(): Flow<List<HabitWithRecords>> {
         val today = DateUtils.today()
-        val start = today.minusDays(29)
+        val start = today.minusDays(STREAK_WINDOW_DAYS - 1)
         return combine(
             habitDao.getAll(),
             recordDao.getBetween(start.toString(), today.toString())
@@ -93,6 +104,9 @@ class HabitRepository(
 
     /** 计算某个习惯从 [today] 往历史推的最大连续完成天数。 */
     fun computeStreak(records: Map<LocalDate, Int>, targetCount: Int, today: LocalDate): Int {
+        // 目标数 <= 0 时 `count >= targetCount` 恒真（缺失日按 0 计），while 会无限回溯 → 死循环/ANR。
+        // 未设目标即视为无连续，直接返回 0。
+        if (targetCount <= 0) return 0
         var streak = 0
         var date = today
         while (true) {

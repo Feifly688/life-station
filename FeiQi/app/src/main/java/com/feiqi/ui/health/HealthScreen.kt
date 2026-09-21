@@ -219,7 +219,10 @@ private fun StatPill(text: String) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelMedium,
-            color = Primary
+            color = Primary,
+            // 记录条数变多（如「共 128 条记录」）时省略，避免把左侧标题挤窄。
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -334,7 +337,8 @@ private fun PersonalInfoCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = OnSurfaceVariant,
                             textAlign = TextAlign.End,
-                            modifier = Modifier.width(120.dp)
+                            // 不写死宽度：按剩余空间自适应，字体放大或窄屏时不再与左侧 BMI 数值争宽。
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -849,9 +853,10 @@ private fun WeightEditDialog(
     onConfirm: (weight: Double, date: LocalDate, note: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var weight by remember { mutableStateOf(trimNumber(record.weight)) }
-    var date by remember { mutableStateOf(record.date) }
-    var note by remember { mutableStateOf(record.note) }
+    // 已编辑对象作为 key：换一条记录时表单必须刷新成新记录的数值（无 key 的 remember 会沿用旧值）。
+    var weight by remember(record) { mutableStateOf(trimNumber(record.weight)) }
+    var date by remember(record) { mutableStateOf(record.date) }
+    var note by remember(record) { mutableStateOf(record.note) }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -944,6 +949,8 @@ private fun trimNumber(value: Double): String {
     return if (abs(value - value.toLong()) < 0.05) {
         value.toLong().toString()
     } else {
-        String.format("%.1f", value)
+        // 固定 Locale.US：这里是**可编辑输入框**的初值，必须与保存时的 toDoubleOrNull() 口径一致，
+        // 否则在逗号小数分隔符的系统语言下会回填 "62,5"，用户不再改动就保存会解析失败。
+        String.format(java.util.Locale.US, "%.1f", value)
     }
 }

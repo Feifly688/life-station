@@ -441,11 +441,20 @@ private fun CompareCard(summary: com.feiqi.data.model.MonthSummary) {
             }
             val percent = if (summary.lastMonthExpense > 0) {
                 ((summary.expense - summary.lastMonthExpense) / summary.lastMonthExpense * 100).toInt()
-            } else 0
+            } else null
             Text(
-                text = if (percent >= 0) "↑ $percent%" else "↓ ${kotlin.math.abs(percent)}%",
+                // 上月无支出时不做对比（原本显示「↑ 0%」，看起来像"增长了 0%"的假结论）。
+                text = when {
+                    percent == null -> stringResource(R.string.no_compare_data)
+                    percent >= 0 -> "↑ $percent%"
+                    else -> "↓ ${kotlin.math.abs(percent)}%"
+                },
                 style = MaterialTheme.typography.labelLarge,
-                color = if (percent >= 0) ExpenseRed else IncomeGreen
+                color = when {
+                    percent == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    percent >= 0 -> ExpenseRed
+                    else -> IncomeGreen
+                }
             )
         }
     }
@@ -518,7 +527,7 @@ private fun BudgetSettingCard(
 ) {
     // 以 current 为 key：预算保存成功后输入框同步显示最新值，避免残留旧输入
     var text by remember(current) {
-        mutableStateOf(if (current > 0) String.format("%.2f", current) else "")
+        mutableStateOf(if (current > 0) String.format(java.util.Locale.US, "%.2f", current) else "")
     }
 
     Card(

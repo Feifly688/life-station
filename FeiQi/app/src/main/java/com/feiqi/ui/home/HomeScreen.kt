@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -465,9 +466,10 @@ private fun StatCard(
 ) {
     Card(
         modifier = if (onClick != null) {
-            modifier.height(100.dp).clickable { onClick() }
+            // 用最小高度而非固定高度：系统字体放大时卡片可以长高，hint 不会被裁掉。
+            modifier.heightIn(min = 100.dp).clickable { onClick() }
         } else {
-            modifier.height(100.dp)
+            modifier.heightIn(min = 100.dp)
         },
         colors = CardDefaults.cardColors(containerColor = background),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -480,7 +482,9 @@ private fun StatCard(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = value,
@@ -492,7 +496,9 @@ private fun StatCard(
             Text(
                 text = hint,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -673,7 +679,8 @@ private fun ShoppingCard(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(18.dp)
+        // 与项目其余卡片统一为 16dp 圆角（此前 18dp 是全项目唯一的取值）。
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
