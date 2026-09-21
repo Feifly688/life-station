@@ -1,7 +1,9 @@
 # Gradle / 构建产物
 .gradle/
 build/
-*.apk.*.tmp
+
+# APK 构建产物（由 release 分支托管，不进 main）
+*.apk
 
 # IDE
 .idea/
