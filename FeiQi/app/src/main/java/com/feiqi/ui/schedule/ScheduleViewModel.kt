@@ -291,9 +291,44 @@ class ScheduleViewModel(
         }
     }
 
-    /** 长按编辑：修改单条日程 / 清单条目的标题。 */
-    fun updateTitle(schedule: Schedule, newTitle: String) {
+    /**
+     * 编辑**单条日程**：标题 + 提醒（时间 / 重复）。
+     *
+     * 提醒关闭时清空时间与重复（无时间待办：不参与逾期判定、不排提醒），
+     * 提醒开启时写入所选时间与重复规则。清单条目（listId != null）不在此路径编辑——
+     * 它们的提醒属于整份清单，统一走 [saveListEdit]。
+     */
+    fun saveItemEdit(
+        schedule: Schedule,
+        newTitle: String,
+        reminderDateTime: java.time.LocalDateTime?,
+        reminderEnabled: Boolean,
+        recurrence: Recurrence
+    ) {
         val title = newTitle.trim()
+        if (title.isEmpty()) {
+            viewModelScope.launch { _events.emit("待办内容不能为空") }
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                val updated = schedule.copy(
+                    title = title,
+                    listTitle = if (schedule.listId == null) title else schedule.listTitle,
+                    date = reminderDateTime?.toLocalDate() ?: schedule.date,
+                    time = if (reminderEnabled) reminderDateTime?.toLocalTime() else null,
+                    reminder = reminderEnabled,
+                    recurrence = if (reminderEnabled) recurrence else Recurrence.NONE
+                )
+                repository.update(updated)
+                reminderScheduler.schedule(updated)
+            }.onSuccess { _events.emit("已保存") }
+                .onFailure { _events.emit("保存失败：${it.message}") }
+        }
+    }
+
+    /** 长按编辑：修改单条日程 / 清单条目的标题。 */
+    fun updateTitle(schedule: Schedule, newTitle: String) {        val title = newTitle.trim()
         if (title.isEmpty()) {
             viewModelScope.launch { _events.emit("标题不能为空") }
             return

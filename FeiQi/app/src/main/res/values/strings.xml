@@ -73,7 +73,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.2.0</string>
+    <string name="version_value">v1.2.1</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -108,6 +108,7 @@
     <string name="collapse">收起</string>
 
     <string name="edit_todo">编辑待办</string>
+    <string name="schedule_title_required">待办内容不能为空</string>
     <string name="edit_list">编辑清单</string>
     <string name="list_name_hint">清单名称</string>
     <string name="rename_list">重命名清单</string>

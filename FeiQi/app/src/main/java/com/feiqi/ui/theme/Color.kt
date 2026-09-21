@@ -34,3 +34,6 @@ val WarmAccent = Color(0xFFE9A63C)
 val CardGreen = Color(0xFFEDF4E6)
 val CardRed = Color(0xFFFDEDE5)
 val CardAmber = Color(0xFFFDF1DC)
+
+/** 首页语录卡填充：与页面背景（#FFFBF5）只差一点点暖度，避免整块色卡显得突兀。 */
+val QuoteSurface = Color(0xFFFAF4EB)

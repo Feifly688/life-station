@@ -1,6 +1,7 @@
 package com.feiqi.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,8 +83,10 @@ import com.feiqi.ui.theme.ExpenseRed
 import com.feiqi.ui.theme.IncomeGreen
 import com.feiqi.ui.theme.OnPrimary
 import com.feiqi.ui.theme.OnSurfaceVariant
+import com.feiqi.ui.theme.OutlineVariant
 import com.feiqi.ui.theme.Primary
 import com.feiqi.ui.theme.PrimaryContainer
+import com.feiqi.ui.theme.QuoteSurface
 import com.feiqi.ui.theme.SurfaceVariant
 import com.feiqi.ui.theme.Tertiary
 import java.text.DecimalFormat
@@ -502,13 +505,15 @@ private fun QuoteCard(quote: String, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.secondaryContainer)
+            // 填充贴近页面背景，仅靠一道极淡的描边界定卡片，视觉过渡更自然（不再用整块色底）。
+            .background(QuoteSurface)
+            .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp))
             .padding(20.dp)
     ) {
         Text(
             text = quote,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSecondaryContainer
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

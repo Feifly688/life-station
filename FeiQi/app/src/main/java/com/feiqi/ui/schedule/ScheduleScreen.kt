@@ -458,7 +458,7 @@ fun ScheduleScreen(
                         val finalDrafts = if (finalText.isNotEmpty()) {
                             draftItems + DraftItem(text = finalText)
                         } else draftItems
-                        submitQuickAdd(
+                        val submitted = submitQuickAdd(
                             viewModel = viewModel,
                             titles = finalDrafts.map { it.text },
                             reminderDateTime = reminderDateTime,
@@ -467,9 +467,12 @@ fun ScheduleScreen(
                             context = context,
                             notificationPermissionLauncher = notificationPermissionLauncher
                         )
-                        draftItems = emptyList()
-                        currentInput = ""
-                        isQuickAddActive = false
+                        // 内容为空时**保持面板打开**（已提示「请填写待办事项」），让用户继续输入。
+                        if (submitted) {
+                            draftItems = emptyList()
+                            currentInput = ""
+                            isQuickAddActive = false
+                        }
                     },
                     onDismiss = {
                         isQuickAddActive = false
@@ -557,16 +560,35 @@ fun ScheduleScreen(
 
     editTarget?.let { target ->
         when (target) {
-            is EditTarget.Item -> TextEditDialog(
-                title = stringResource(R.string.edit_todo),
-                initialText = target.schedule.title,
-                label = stringResource(R.string.what_to_do),
-                onConfirm = {
-                    viewModel.updateTitle(target.schedule, it)
-                    editTarget = null
-                },
-                onDismiss = { editTarget = null }
-            )
+            is EditTarget.Item -> if (target.schedule.listId == null) {
+                // 单条待办：标题 + 提醒（未设置时显示「设置提醒」按钮，已设置时显示提醒芯片）。
+                ItemEditDialog(
+                    schedule = target.schedule,
+                    onDismiss = { editTarget = null },
+                    onSave = { newTitle, reminderDateTime, reminderEnabled, recurrence ->
+                        viewModel.saveItemEdit(
+                            schedule = target.schedule,
+                            newTitle = newTitle,
+                            reminderDateTime = reminderDateTime,
+                            reminderEnabled = reminderEnabled,
+                            recurrence = recurrence
+                        )
+                        editTarget = null
+                    }
+                )
+            } else {
+                // 清单条目：提醒属于整份清单，这里只改标题（清单的提醒/重复走点击清单卡片）。
+                TextEditDialog(
+                    title = stringResource(R.string.edit_todo),
+                    initialText = target.schedule.title,
+                    label = stringResource(R.string.what_to_do),
+                    onConfirm = {
+                        viewModel.updateTitle(target.schedule, it)
+                        editTarget = null
+                    },
+                    onDismiss = { editTarget = null }
+                )
+            }
             is EditTarget.ListTitle -> TextEditDialog(
                 title = stringResource(R.string.rename_list),
                 initialText = target.currentTitle,
@@ -592,6 +614,10 @@ fun ScheduleScreen(
     }
 }
 
+/**
+ * 提交快速添加。
+ * @return 是否已成功加入日程；false 表示内容为空（已弹提示），调用方**不应关闭**添加面板。
+ */
 internal fun submitQuickAdd(
     viewModel: ScheduleViewModel,
     titles: List<String>,
@@ -600,10 +626,10 @@ internal fun submitQuickAdd(
     recurrence: Recurrence,
     context: android.content.Context,
     notificationPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
-) {
+): Boolean {
     if (titles.isEmpty()) {
         Toast.makeText(context, "请填写待办事项", Toast.LENGTH_SHORT).show()
-        return
+        return false
     }
     viewModel.addSchedules(
         titles = titles,
@@ -619,6 +645,7 @@ internal fun submitQuickAdd(
         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         Toast.makeText(context, context.getString(R.string.need_permission_toast), Toast.LENGTH_SHORT).show()
     }
+    return true
 }
 
 internal fun itemKey(item: ScheduleListItem): String = when (item) {
