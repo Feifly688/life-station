@@ -160,6 +160,8 @@ fun ScheduleScreen(
     // 提醒复选框：默认不开启，点击设置提醒后才启用。
     var reminderEnabled by remember { mutableStateOf(false) }
     var quickAddRecurrence by remember { mutableStateOf(Recurrence.NONE) }
+    // 清单标题：仅当本次添加 ≥2 条（形成清单）时显示并生效，默认「待办清单」。
+    var quickAddListTitle by remember { mutableStateOf("待办清单") }
     var showReminderDialog by remember { mutableStateOf(false) }
     var reminderSetTip by remember { mutableStateOf<String?>(null) }
 
@@ -433,10 +435,12 @@ fun ScheduleScreen(
                 QuickAddPanel(
                     draftItems = draftItems,
                     currentInput = currentInput,
+                    listTitle = quickAddListTitle,
                     reminderEnabled = reminderEnabled,
                     reminderDateTime = reminderDateTime,
                     recurrence = quickAddRecurrence,
                     onCurrentInputChange = { currentInput = it },
+                    onListTitleChange = { quickAddListTitle = it },
                     onCommitCurrent = {
                         // 空内容不入草稿行（避免留下一个空输入框）；与「完成」按钮的可用性判断一致。
                         val text = currentInput.trim()
@@ -465,6 +469,7 @@ fun ScheduleScreen(
                         val submitted = submitQuickAdd(
                             viewModel = viewModel,
                             titles = finalDrafts.map { it.text },
+                            listTitle = quickAddListTitle,
                             reminderDateTime = reminderDateTime,
                             reminderEnabled = reminderEnabled,
                             recurrence = quickAddRecurrence,
@@ -487,10 +492,12 @@ fun ScheduleScreen(
             } else {
                 FloatingActionButton(
                     onClick = {
-                        // 每次重新打开都复位：默认不启用提醒（即无时间待办）、默认不重复、提醒时间=当前+1分钟
+                        // 每次重新打开都复位：默认不启用提醒（即无时间待办）、默认不重复、
+                        // 清单标题回到默认「待办清单」、提醒时间=当前+1分钟
                         reminderDateTime = LocalDateTime.of(DateUtils.today(), defaultReminderTime())
                         reminderEnabled = false
                         quickAddRecurrence = Recurrence.NONE
+                        quickAddListTitle = "待办清单"
                         isQuickAddActive = true
                     },
                     modifier = Modifier
@@ -620,11 +627,15 @@ fun ScheduleScreen(
 
 /**
  * 提交快速添加。
+ *
+ * [listTitle] 只在提交 ≥2 条（形成清单）时生效；单条仍是「内容即标题」，与原有行为一致。
+ *
  * @return 是否已成功加入日程；false 表示内容为空（已弹提示），调用方**不应关闭**添加面板。
  */
 internal fun submitQuickAdd(
     viewModel: ScheduleViewModel,
     titles: List<String>,
+    listTitle: String,
     reminderDateTime: LocalDateTime,
     reminderEnabled: Boolean,
     recurrence: Recurrence,
@@ -641,7 +652,9 @@ internal fun submitQuickAdd(
         // 未主动设置提醒 → 无时间状态：不写入时间，系统不判逾期，由用户手动完成或删除。
         time = if (reminderEnabled) reminderDateTime.toLocalTime() else null,
         reminder = reminderEnabled,
-        recurrence = if (reminderEnabled) recurrence else Recurrence.NONE
+        recurrence = if (reminderEnabled) recurrence else Recurrence.NONE,
+        // 用户把标题清空时回落到默认「待办清单」，不产生无名清单。
+        listTitle = listTitle.trim().ifBlank { "待办清单" }
     )
     if (reminderEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
         && !NotificationUtils.hasPermission(context)

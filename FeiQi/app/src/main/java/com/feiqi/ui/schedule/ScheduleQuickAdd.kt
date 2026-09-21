@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -119,6 +121,7 @@ import java.util.UUID
 internal fun QuickAddPanel(
     draftItems: List<DraftItem>,
     currentInput: String,
+    listTitle: String,
     reminderEnabled: Boolean,
     reminderDateTime: LocalDateTime,
     recurrence: Recurrence,
@@ -126,6 +129,7 @@ internal fun QuickAddPanel(
     onCommitCurrent: () -> Unit,
     onDraftEdit: (id: String, newText: String) -> Unit,
     onDraftDelete: (id: String) -> Unit,
+    onListTitleChange: (String) -> Unit,
     focusRequester: FocusRequester,
     onSetReminder: () -> Unit,
     onCancelReminder: () -> Unit,
@@ -176,6 +180,16 @@ internal fun QuickAddPanel(
     // 「完成」可用性：当前输入行或任意一条待办有内容才允许提交（空内容时按钮置灰不可点）。
     val canSubmit = currentInput.isNotBlank() || draftItems.any { it.text.isNotBlank() }
 
+    // 已确认的待办达到 2 条及以上 → 本次提交会形成「待办清单」：
+    // 面板顶部出现可编辑的清单标题（默认「待办清单」），待办内容默认收起。
+    // 只有 1 条时保持原有形态：直接展示待办内容，不出现标题输入框。
+    val isListMode = draftItems.size >= 2
+    var contentExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(isListMode) {
+        // 每次进入清单形态都回到「默认收起」；退回单条形态时不处理（下次进入会重置）。
+        if (isListMode) contentExpanded = false
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -185,23 +199,37 @@ internal fun QuickAddPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
+            // 清单形态（≥2 条）：顶部是可编辑的清单标题 + 待办内容的收起/展开开关。
+            if (isListMode) {
+                QuickAddListHeader(
+                    title = listTitle,
+                    onTitleChange = onListTitleChange,
+                    count = draftItems.size,
+                    expanded = contentExpanded,
+                    onToggleExpand = { contentExpanded = !contentExpanded }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                draftItems.forEach { item ->
-                    val itemFocusRequester = remember(item.id) { FocusRequester() }
-                    DisposableEffect(item.id) {
-                        draftFocusRequesters[item.id] = itemFocusRequester
-                        onDispose { draftFocusRequesters.remove(item.id) }
+                // 单条：直接展示待办内容；清单：内容默认收起，展开后可逐条编辑。
+                if (!isListMode || contentExpanded) {
+                    draftItems.forEach { item ->
+                        val itemFocusRequester = remember(item.id) { FocusRequester() }
+                        DisposableEffect(item.id) {
+                            draftFocusRequesters[item.id] = itemFocusRequester
+                            onDispose { draftFocusRequesters.remove(item.id) }
+                        }
+                        DraftItemRow(
+                            item = item,
+                            onTextChange = { newText -> onDraftEdit(item.id, newText) },
+                            onDelete = { deleteDraft(item.id) },
+                            // 行内回车 = 该条编辑完成，光标回到下方新增待办输入行继续录入。
+                            onFinishEdit = { focusActiveInput() },
+                            focusRequester = itemFocusRequester,
+                            cursorAtEnd = pendingCursorAtEnd[item.id] == true,
+                            onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
+                        )
                     }
-                    DraftItemRow(
-                        item = item,
-                        onTextChange = { newText -> onDraftEdit(item.id, newText) },
-                        onDelete = { deleteDraft(item.id) },
-                        // 行内回车 = 该条编辑完成，光标回到下方新增待办输入行继续录入。
-                        onFinishEdit = { focusActiveInput() },
-                        focusRequester = itemFocusRequester,
-                        cursorAtEnd = pendingCursorAtEnd[item.id] == true,
-                        onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
-                    )
                 }
                 if (activeInputVisible) {
                     ActiveInputRow(
@@ -339,6 +367,82 @@ internal fun ActiveInputRow(
             }),
             maxLines = 2
         )
+    }
+}
+
+/**
+ * 清单形态的表头：可编辑的清单标题 + 待办内容的收起/展开开关。
+ *
+ * 仅当待办达到 2 条及以上（会形成清单）时显示；标题默认「待办清单」，
+ * 添加过程中就能改，不必先建好再进「编辑清单」重命名。
+ */
+@Composable
+private fun QuickAddListHeader(
+    title: String,
+    onTitleChange: (String) -> Unit,
+    count: Int,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit
+) {
+    Column {
+        Text(
+            text = stringResource(R.string.list_title_label),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        BasicTextField(
+            value = title,
+            onValueChange = onTitleChange,
+            singleLine = true,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium
+            ),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { innerTextField ->
+                Box {
+                    // 清空时给回默认名提示（提交时也会回落到默认名，见 submitQuickAdd）。
+                    if (title.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.default_list_title),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggleExpand() },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.todo_content_label) + " · " +
+                    stringResource(R.string.todo_count_format, count),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Icon(
+                imageVector = if (expanded) {
+                    Icons.Filled.KeyboardArrowUp
+                } else {
+                    Icons.Filled.KeyboardArrowDown
+                },
+                contentDescription = stringResource(
+                    if (expanded) R.string.collapse else R.string.expand
+                ),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
