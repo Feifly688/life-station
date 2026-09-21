@@ -2,12 +2,14 @@ package com.feiqi.ui.schedule
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleFilter
 import com.feiqi.data.model.ScheduleListItem
 import com.feiqi.data.model.ScheduleUiState
 import com.feiqi.data.repository.ScheduleRepository
 import com.feiqi.utils.DateUtils
+import com.feiqi.utils.RecurrenceUtils
 import com.feiqi.utils.ReminderScheduler
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +48,10 @@ class ScheduleViewModel(
         val listItems = buildListItems(all)
 
         val todayCount = all.count { it.date == today && !it.completed && it.listId == null }
-        val overdueCount = all.count { it.date < today && !it.completed && it.listId == null }
+        // 只有「已设置提醒」的条目才判定逾期：未设提醒即无时间状态，由用户手动完成或删除。
+        val overdueCount = all.count {
+            it.date < today && !it.completed && it.listId == null && it.reminder
+        }
         val upcoming7Count = all.count {
             it.listId == null && !it.completed && it.date in today..end7
         }
@@ -81,14 +86,14 @@ class ScheduleViewModel(
      * 批量添加日程。
      * - 只有一条：作为独立单条日程，不循环。
      * - 多条：聚合成一个清单；清单标题默认「待办清单」。
-     *   isRecurring 仅对清单生效，单条日程强制 false。
+     *   [recurrence] 仅对清单生效，单条日程强制 NONE；未开启提醒时恒为 NONE。
      */
     fun addSchedules(
         titles: List<String>,
         date: LocalDate,
         time: LocalTime?,
         reminder: Boolean,
-        isRecurring: Boolean = false,
+        recurrence: Recurrence = Recurrence.NONE,
         listTitle: String = "待办清单"
     ) {
         val trimmed = titles.map { it.trim() }.filter { it.isNotEmpty() }
@@ -107,7 +112,7 @@ class ScheduleViewModel(
                         reminder = reminder,
                         listId = null,
                         listTitle = trimmed.first(),
-                        isRecurring = isRecurring
+                        recurrence = recurrence
                     )
                     val id = repository.insert(schedule)
                     if (id > 0) reminderScheduler.schedule(schedule.copy(id = id))
@@ -123,7 +128,7 @@ class ScheduleViewModel(
                             createdAt = now + index,
                             listId = listId,
                             listTitle = listTitle,
-                            isRecurring = isRecurring,
+                            recurrence = recurrence,
                             itemOrder = index
                         )
                     }
@@ -141,16 +146,18 @@ class ScheduleViewModel(
     }
 
     /**
-     * 每日重复清单「手动标记完成」的循环处理：
-     * 1. 生成「当日已完成快照副本」：新 listId（原listId#done#iso今天），所有 item
-     *    completed=true、completedDate=今天、date=今天、isRecurring=false（快照不再循环），
-     *    time/listTitle 不变 → 进入已完成区，作为今日完成记录留存。
-     * 2. 原清单所有 item：date+1、completed=false、completedDate=null、lastResetDate=null
-     *    → 留在待完成区继续循环，提醒=次日同时刻（时分秒不变）。
+     * 循环清单「手动标记完成」的循环处理：
+     * 1. 生成「已完成快照副本」：新 listId（原listId#done#iso今天#时分秒），所有 item
+     *    completed=true、completedDate=今天、date=今天、recurrence=NONE（快照不再循环），
+     *    time/listTitle 不变 → 进入已完成区，作为本次完成记录留存。
+     * 2. 原清单所有 item：按重复规则顺延到下一个应提醒日（每天 +1 天 / 周一至周五跳过周末 /
+     *    每周 +7 天 / 每月 +1 月 / 每年 +1 年）、completed=false、completedDate=null、
+     *    lastResetDate=null → 留在待完成区继续循环，提醒时刻不变。
      * 3. 重排原清单提醒。
      *
-     * 与 ReminderReceiver（到点只弹通知、不自动循环）+ FeiQiApplication 次日重置（date<today
-     * 的循环清单顺延到当天）配合，实现用户预期的循环语义。
+     * 循环清单**不回补历史欠账**：错过的周期直接落到下一个应提醒日。
+     * 与 ReminderReceiver（到点只弹通知、不自动循环）+ FeiQiApplication 启动补推配合，
+     * 实现用户预期的循环语义。
      */
     private suspend fun advanceRecurringList(
         listId: String,
@@ -170,26 +177,38 @@ class ScheduleViewModel(
                 completed = true,
                 completedDate = today,
                 date = today,
-                isRecurring = false, // 快照不再循环
+                recurrence = Recurrence.NONE, // 快照不再循环
                 lastResetDate = null,
                 itemOrder = index,
                 createdAt = now + index
             )
         }
         repository.insertBatch(snapshot)
-        // 2. 原清单顺延 +1 天，重置为未完成继续循环。
+        // 2. 原清单按重复规则顺延，重置为未完成继续循环。
         val advanced = group.map {
             it.copy(
-                date = it.date.plusDays(1),
+                date = RecurrenceUtils.nextOccurrence(it.date, it.recurrence),
                 completed = false,
                 completedDate = null,
                 lastResetDate = null
             )
         }
         repository.updateBatch(advanced)
-        // 3. 重排原清单提醒（下次提醒=原时间+1天，时分秒不变）。
+        // 3. 重排原清单提醒（下次提醒=下一个应提醒日的同一时刻）。
         val all = repository.getAll().first()
         reminderScheduler.scheduleList(listId, all)
+    }
+
+    /** 循环清单完成后的提示文案：告诉用户下次何时继续提醒。 */
+    private fun nextReminderTip(nextDate: LocalDate, time: LocalTime?): String {
+        val today = DateUtils.today()
+        val day = when (nextDate) {
+            today -> "今天"
+            today.plusDays(1) -> "明日"
+            else -> DateUtils.monthDay(nextDate)
+        }
+        val at = time?.let { " ${DateUtils.hm(it)}" }.orEmpty()
+        return "已完成，$day$at 继续提醒"
     }
 
     fun toggleComplete(schedule: Schedule) {
@@ -210,13 +229,13 @@ class ScheduleViewModel(
                         reminderScheduler.scheduleList(listId, all)
                         if (markCompleted && group.all { it.completed }) {
                             if (group.any { it.isRecurring }) {
-                                // 每日重复清单：生成已完成快照副本 + 原清单顺延 +1 天继续循环。
+                                // 循环清单：生成已完成快照副本 + 原清单按重复规则顺延继续循环。
+                                val sample = group.firstOrNull()
+                                val nextDate = sample
+                                    ?.let { RecurrenceUtils.nextOccurrence(it.date, it.recurrence) }
+                                    ?: today
                                 advanceRecurringList(listId, group, today)
-                                val timeText = group.firstOrNull()?.time?.let { DateUtils.hm(it) }
-                                _events.emit(
-                                    if (timeText != null) "已完成，明日 $timeText 继续提醒"
-                                    else "已完成，明日继续提醒"
-                                )
+                                _events.emit(nextReminderTip(nextDate, sample?.time))
                             } else {
                                 // 普通清单：统一记录完成日期
                                 repository.updateBatch(group.map { it.copy(completedDate = today) })
@@ -247,16 +266,16 @@ class ScheduleViewModel(
                 val today = DateUtils.today()
                 val isRecurring = all.any { it.listId == listId && it.isRecurring }
                 if (completed && isRecurring) {
-                    // 每日重复清单标记完成：记完成记录 + 提醒顺延 +1 天 + 重置为未完成继续循环。
+                    // 循环清单标记完成：记完成记录 + 按重复规则顺延 + 重置为未完成继续循环。
                     // 用全量 group（含已完成项），不限于「需切换」的 target。
                     val fullGroup = all.filter { it.listId == listId }
                     if (fullGroup.isEmpty()) return@runCatching
+                    val sample = fullGroup.firstOrNull()
+                    val nextDate = sample
+                        ?.let { RecurrenceUtils.nextOccurrence(it.date, it.recurrence) }
+                        ?: today
                     advanceRecurringList(listId, fullGroup, today)
-                    val timeText = fullGroup.firstOrNull()?.time?.let { DateUtils.hm(it) }
-                    _events.emit(
-                        if (timeText != null) "已完成，明日 $timeText 继续提醒"
-                        else "已完成，明日继续提醒"
-                    )
+                    _events.emit(nextReminderTip(nextDate, sample?.time))
                 } else {
                     val target = all.filter { it.listId == listId && it.completed != completed }
                     if (target.isEmpty()) return@runCatching
@@ -336,7 +355,7 @@ class ScheduleViewModel(
                     reminder = sample.reminder,
                     listId = listId,
                     listTitle = sample.listTitle,
-                    isRecurring = sample.isRecurring,
+                    recurrence = sample.recurrence,
                     itemOrder = (siblings.maxOfOrNull { it.itemOrder } ?: 0) + 1
                 )
                 val id = repository.insert(schedule)
@@ -360,7 +379,7 @@ class ScheduleViewModel(
         deletedIds: Set<Long>,
         reminderDateTime: java.time.LocalDateTime?,
         reminderEnabled: Boolean,
-        isRecurring: Boolean
+        recurrence: Recurrence
     ) {
         val title = newTitle.trim()
         if (title.isEmpty()) {
@@ -389,7 +408,9 @@ class ScheduleViewModel(
                 val date = reminderDateTime?.toLocalDate()
                     ?: existing.firstOrNull()?.date
                     ?: DateUtils.today()
-                val time = reminderDateTime?.toLocalTime()
+                // 未开启提醒 → 无时间状态（不参与逾期判定，由用户手动完成或删除）。
+                val time = if (reminderEnabled) reminderDateTime?.toLocalTime() else null
+                val effectiveRecurrence = if (reminderEnabled) recurrence else Recurrence.NONE
 
                 // 更新已有条目：标题、顺序、提醒、重复
                 val updatedExisting = validItems.filter { it.id != null && it.id in existingIds }
@@ -401,7 +422,7 @@ class ScheduleViewModel(
                             date = date,
                             time = time,
                             reminder = reminderEnabled,
-                            isRecurring = reminderEnabled && isRecurring,
+                            recurrence = effectiveRecurrence,
                             itemOrder = index
                         )
                     }
@@ -417,7 +438,7 @@ class ScheduleViewModel(
                         reminder = reminderEnabled,
                         listId = listId,
                         listTitle = title,
-                        isRecurring = reminderEnabled && isRecurring,
+                        recurrence = effectiveRecurrence,
                         itemOrder = updatedExisting.size + index
                     )
                 }
@@ -515,7 +536,8 @@ class ScheduleViewModel(
                     title = items.firstOrNull { it.listTitle.isNotBlank() }?.listTitle
                         ?: items.first().title,
                     items = items.sortedBy { it.itemOrder },
-                    isRecurring = items.any { it.isRecurring }
+                    recurrence = items.firstOrNull { it.recurrence.isRepeating }?.recurrence
+                        ?: Recurrence.NONE
                 )
             }
         val singleItems = singles.map { ScheduleListItem.Single(it) }

@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
  * - 提醒触发只弹通知，清单保持原状（用户可见「已过期/到点」状态）。
  * - 用户手动标记完成时，由 [com.feiqi.ui.schedule.ScheduleViewModel] 生成已完成快照副本
  *   + 原清单顺延继续循环。
- * - 当天未手动完成，次日 App 启动时由 FeiQiApplication 把 date 顺延到当天、状态保持待完成。
+ * - 当天未手动完成，下次 App 启动时由 FeiQiApplication 按重复规则把 date 推进到
+ *   不早于今天的下一个应提醒日（每天/周一至周五/每周/每月/每年），状态保持待完成。
  *
  * 线程模型：`onReceive` 运行在主线程且只有约 10s 预算，因此**不做任何阻塞式查库**
  * （历史上这里用 runBlocking 读全表，冷启动/大清单下有 ANR 风险）。清单提醒需要读库，

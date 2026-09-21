@@ -95,6 +95,7 @@ import android.os.Build
 import android.view.WindowManager
 import android.widget.Toast
 import com.feiqi.R
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleListItem
 import com.feiqi.ui.components.ConfirmDialog
@@ -105,6 +106,7 @@ import com.feiqi.ui.components.InfoDialog
 import com.feiqi.ui.components.ReminderSettingDialog
 import com.feiqi.ui.components.TextEditDialog
 import com.feiqi.ui.components.rememberDeleteConfirm
+import com.feiqi.ui.components.recurrenceLabel
 import com.feiqi.ui.theme.CardRed
 import com.feiqi.ui.theme.OnPrimary
 import com.feiqi.ui.theme.Outline
@@ -132,7 +134,7 @@ internal fun ListEditDialog(
         deletedIds: Set<Long>,
         reminderDateTime: LocalDateTime?,
         reminderEnabled: Boolean,
-        isRecurring: Boolean
+        recurrence: Recurrence
     ) -> Unit,
     onDeleteList: () -> Unit
 ) {
@@ -167,7 +169,7 @@ internal fun ListEditDialog(
         )
     }
     var reminderEnabled by remember { mutableStateOf(group.items.any { it.reminder }) }
-    var isRecurring by remember { mutableStateOf(group.isRecurring) }
+    var recurrence by remember { mutableStateOf(group.recurrence) }
     var showReminderDialog by remember { mutableStateOf(false) }
 
     val newItemFocusRequester = remember { FocusRequester() }
@@ -240,7 +242,7 @@ internal fun ListEditDialog(
                 deletedIds,
                 if (reminderEnabled) reminderDateTime else null,
                 reminderEnabled,
-                isRecurring
+                recurrence
             )
         } else {
             // 内容已清空：自动删除该清单（不再保存一个空清单）。
@@ -517,7 +519,9 @@ internal fun ListEditDialog(
                                 append(DateUtils.friendly(reminderDateTime.toLocalDate()))
                                 append(" ")
                                 append(DateUtils.hm(reminderDateTime.toLocalTime()))
-                                if (isRecurring) append(" · ").append(stringResource(R.string.daily))
+                                if (recurrence.isRepeating) {
+                                    append(" · ").append(recurrenceLabel(recurrence))
+                                }
                             },
                             onCancel = {
                                 reminderEnabled = false
@@ -568,12 +572,12 @@ internal fun ListEditDialog(
     if (showReminderDialog) {
         ReminderSettingDialog(
             initialDateTime = reminderDateTime,
-            initialRecurring = isRecurring,
+            initialRecurrence = recurrence,
             onDismiss = { showReminderDialog = false },
-            onConfirm = { dateTime, recurring ->
+            onConfirm = { dateTime, picked ->
                 reminderDateTime = dateTime
                 reminderEnabled = true
-                isRecurring = recurring
+                recurrence = picked
                 showReminderDialog = false
             }
         )

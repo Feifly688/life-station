@@ -21,11 +21,18 @@ data class Schedule(
     // 清单相关（v6）
     val listId: String? = null,
     val listTitle: String = title,
-    val isRecurring: Boolean = false,
+    /** 重复规则；未开启提醒时恒为 [Recurrence.NONE]。 */
+    val recurrence: Recurrence = Recurrence.NONE,
     val itemOrder: Int = 0,
     val lastResetDate: LocalDate? = null,
     val completedDate: LocalDate? = null
-)
+) {
+    /** 是否循环条目（兼容既有调用点）。 */
+    val isRecurring: Boolean get() = recurrence.isRepeating
+
+    /** 是否处于「无时间」状态：不填时间即以未定时待办存在，不参与逾期判定。 */
+    val untimed: Boolean get() = time == null
+}
 
 data class ScheduleUiState(
     val schedules: List<Schedule> = emptyList(),
@@ -50,11 +57,18 @@ sealed class ScheduleListItem {
         val listId: String,
         val title: String,
         val items: List<Schedule>,
-        val isRecurring: Boolean,
+        /** 清单的重复规则（清单内各条目一致）。 */
+        val recurrence: Recurrence,
         val expanded: Boolean = false
     ) : ScheduleListItem() {
         val total: Int get() = items.size
         val completedCount: Int get() = items.count { it.completed }
         val allCompleted: Boolean get() = total > 0 && completedCount == total
+
+        /** 是否循环清单（兼容既有调用点）。 */
+        val isRecurring: Boolean get() = recurrence.isRepeating
+
+        /** 清单是否处于「无时间」状态。 */
+        val untimed: Boolean get() = items.all { it.time == null }
     }
 }

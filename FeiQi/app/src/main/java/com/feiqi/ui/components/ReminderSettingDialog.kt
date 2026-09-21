@@ -22,10 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.feiqi.R
+import com.feiqi.data.model.Recurrence
 import com.feiqi.ui.theme.OnPrimary
 import com.feiqi.ui.theme.Primary
 import com.feiqi.ui.theme.SurfaceVariant
@@ -71,15 +75,16 @@ import java.util.Locale
 @Composable
 fun ReminderSettingDialog(
     initialDateTime: LocalDateTime,
-    initialRecurring: Boolean = false,
+    initialRecurrence: Recurrence = Recurrence.NONE,
     onDismiss: () -> Unit,
-    onConfirm: (LocalDateTime, Boolean) -> Unit
+    onConfirm: (LocalDateTime, Recurrence) -> Unit
 ) {
     var selectedDate by remember { mutableStateOf(initialDateTime.toLocalDate()) }
     var selectedTime by remember { mutableStateOf(initialDateTime.toLocalTime()) }
     var mode by remember { mutableStateOf(Mode.DATE) } // DATE / TIME
     var dateView by remember { mutableStateOf(DateView.CALENDAR) } // CALENDAR / WHEEL
-    var isRecurring by remember { mutableStateOf(initialRecurring) }
+    var recurrence by remember { mutableStateOf(initialRecurrence) }
+    var repeatMenuExpanded by remember { mutableStateOf(false) }
     var isLunar by remember { mutableStateOf(false) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy/MM/dd", Locale.CHINA) }
@@ -159,34 +164,60 @@ fun ReminderSettingDialog(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 重复提醒
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { isRecurring = !isRecurring },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.repeat_reminder),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                // 重复提醒：右侧为下拉框，点击展开六个选项（不重复 / 每天 / 周一至周五 / 每周 / 每月 / 每年）
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { repeatMenuExpanded = true }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = if (isRecurring) {
-                                stringResource(R.string.daily)
-                            } else {
-                                stringResource(R.string.no_repeat)
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = stringResource(R.string.repeat_reminder),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = recurrenceLabel(recurrence),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (recurrence.isRepeating) {
+                                    Primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                            Icon(
+                                imageVector = Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = repeatMenuExpanded,
+                        onDismissRequest = { repeatMenuExpanded = false }
+                    ) {
+                        recurrenceOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = recurrenceLabel(option),
+                                        color = if (option == recurrence) {
+                                            Primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                },
+                                onClick = {
+                                    recurrence = option
+                                    repeatMenuExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -257,7 +288,7 @@ fun ReminderSettingDialog(
                     }
                     Button(
                         onClick = {
-                            onConfirm(LocalDateTime.of(selectedDate, selectedTime), isRecurring)
+                            onConfirm(LocalDateTime.of(selectedDate, selectedTime), recurrence)
                         },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),

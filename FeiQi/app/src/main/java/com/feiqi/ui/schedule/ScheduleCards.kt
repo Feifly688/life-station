@@ -100,6 +100,7 @@ import com.feiqi.ui.components.InfoDialog
 import com.feiqi.ui.components.ReminderSettingDialog
 import com.feiqi.ui.components.TextEditDialog
 import com.feiqi.ui.components.rememberDeleteConfirm
+import com.feiqi.ui.components.recurrenceLabel
 import com.feiqi.ui.theme.CardRed
 import com.feiqi.ui.theme.ExpenseRed
 import com.feiqi.ui.theme.OnPrimary
@@ -174,7 +175,8 @@ internal fun SingleScheduleCard(
     modifier: Modifier = Modifier
 ) {
     val today = DateUtils.today()
-    val isOverdue = isScheduleOverdue(schedule.date, schedule.time, today) && !schedule.completed
+    val isOverdue = isScheduleOverdue(schedule.date, schedule.time, schedule.reminder, today) &&
+        !schedule.completed
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -290,7 +292,9 @@ internal fun ScheduleGroupCard(
     modifier: Modifier = Modifier
 ) {
     val today = DateUtils.today()
-    val hasOverdue = group.items.any { isScheduleOverdue(it.date, it.time, today) && !it.completed }
+    val hasOverdue = group.items.any {
+        isScheduleOverdue(it.date, it.time, it.reminder, today) && !it.completed
+    }
     val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "arrow")
 
     Card(
@@ -353,7 +357,7 @@ internal fun ScheduleGroupCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    val dailyText = stringResource(R.string.daily)
+                    val recurrenceText = recurrenceLabel(group.recurrence)
                     val overdueText = stringResource(R.string.overdue)
                     val completedDateText = group.items.firstNotNullOfOrNull { it.completedDate }?.let {
                         stringResource(R.string.list_completed_date, DateUtils.monthDay(it))
@@ -365,7 +369,7 @@ internal fun ScheduleGroupCard(
                     val subInfo = remember(
                         group,
                         hasOverdue,
-                        dailyText,
+                        recurrenceText,
                         overdueText,
                         completedDateText,
                         reminderTimeText,
@@ -383,7 +387,7 @@ internal fun ScheduleGroupCard(
                                 }
                             }
                         }
-                        if (group.isRecurring) parts += dailyText
+                        if (group.isRecurring) parts += recurrenceText
                         if (hasOverdue && !isCompleted) parts += overdueText
                         parts.joinToString(" · ")
                     }
@@ -525,7 +529,8 @@ internal fun CompletedSectionHeader(
 }
 
 /**
- * 判断日程是否「提醒时间已过」：
+ * 判断日程是否「提醒时间已过」（仅对**已设置提醒**的条目生效）：
+ * - 未设置提醒（reminder = false，即无时间待办）→ **永不判逾期**，由用户手动完成或删除；
  * - date < today → 过期
  * - date == today 且 time != null 且 now > time → 过期（今天但提醒时间已过）
  * - date == today 且 time == null → 视为「当天提醒」，未过期
@@ -534,8 +539,10 @@ internal fun CompletedSectionHeader(
 private fun isScheduleOverdue(
     date: java.time.LocalDate,
     time: java.time.LocalTime?,
+    reminder: Boolean,
     today: java.time.LocalDate
 ): Boolean {
+    if (!reminder) return false
     if (date < today) return true
     if (date == today && time != null) {
         return java.time.LocalTime.now() > time

@@ -92,6 +92,7 @@ import android.Manifest
 import android.os.Build
 import android.widget.Toast
 import com.feiqi.R
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleListItem
 import com.feiqi.ui.components.ConfirmDialog
@@ -102,6 +103,7 @@ import com.feiqi.ui.components.InfoDialog
 import com.feiqi.ui.components.ReminderSettingDialog
 import com.feiqi.ui.components.TextEditDialog
 import com.feiqi.ui.components.rememberDeleteConfirm
+import com.feiqi.ui.components.recurrenceLabel
 import com.feiqi.ui.theme.CardRed
 import com.feiqi.ui.theme.ExpenseRed
 import com.feiqi.ui.theme.OnPrimary
@@ -122,6 +124,7 @@ internal fun QuickAddPanel(
     currentInput: String,
     reminderEnabled: Boolean,
     reminderDateTime: LocalDateTime,
+    recurrence: Recurrence,
     onCurrentInputChange: (String) -> Unit,
     onCommitCurrent: () -> Unit,
     onDraftEdit: (id: String, newText: String) -> Unit,
@@ -243,6 +246,9 @@ internal fun QuickAddPanel(
                             append(DateUtils.friendly(reminderDateTime.toLocalDate()))
                             append(" ")
                             append(DateUtils.hm(reminderDateTime.toLocalTime()))
+                            if (recurrence.isRepeating) {
+                                append(" · ").append(recurrenceLabel(recurrence))
+                            }
                         },
                         onCancel = onCancelReminder
                     )

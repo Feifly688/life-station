@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.feiqi.data.model.AccountRecord
 import com.feiqi.data.model.HomeUiState
 import com.feiqi.data.model.Media
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleListItem
 import com.feiqi.data.model.ShoppingItem
@@ -175,18 +176,21 @@ class HomeViewModel(
      * 把「今天」相关的日程聚合成首页展示项：
      * - 单条日程：日期为今天，或已逾期未完成
      * - 待办清单：清单内存在今天 / 逾期未完成的条目，就整份展示
+     *
+     * 逾期仅对**已设置提醒**的条目成立：未设提醒即无时间待办，由用户手动完成或删除，
+     * 不会出现在首页的「逾期」提示里（与日程页 isScheduleOverdue 的口径保持一致）。
      */
     private fun buildTodayItems(all: List<Schedule>, today: LocalDate): List<ScheduleListItem> {
         val (withList, singles) = all.partition { it.listId != null }
 
         val singleItems = singles
-            .filter { it.date == today || (it.date < today && !it.completed) }
+            .filter { it.date == today || (it.reminder && it.date < today && !it.completed) }
             .sortedWith(compareBy({ it.completed }, { it.time ?: LocalTime.MAX }))
             .map { ScheduleListItem.Single(it) }
 
         val groups = withList.groupBy { it.listId!! }
             .filterValues { items ->
-                items.any { it.date == today || (it.date < today && !it.completed) }
+                items.any { it.date == today || (it.reminder && it.date < today && !it.completed) }
             }
             .map { (listId, items) ->
                 ScheduleListItem.Group(
@@ -194,7 +198,8 @@ class HomeViewModel(
                     title = items.firstOrNull { it.listTitle.isNotBlank() }?.listTitle
                         ?: items.first().title,
                     items = items.sortedBy { it.itemOrder },
-                    isRecurring = items.any { it.isRecurring }
+                    recurrence = items.firstOrNull { it.recurrence.isRepeating }?.recurrence
+                        ?: Recurrence.NONE
                 )
             }
             .sortedWith(

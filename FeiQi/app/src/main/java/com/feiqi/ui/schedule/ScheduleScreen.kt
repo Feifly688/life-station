@@ -91,6 +91,7 @@ import android.Manifest
 import android.os.Build
 import android.widget.Toast
 import com.feiqi.R
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleListItem
 import com.feiqi.ui.components.ConfirmDialog
@@ -158,12 +159,13 @@ fun ScheduleScreen(
     }
     // 提醒复选框：默认不开启，点击设置提醒后才启用。
     var reminderEnabled by remember { mutableStateOf(false) }
-    var quickAddRecurring by remember { mutableStateOf(false) }
+    var quickAddRecurrence by remember { mutableStateOf(Recurrence.NONE) }
     var showReminderDialog by remember { mutableStateOf(false) }
     var reminderSetTip by remember { mutableStateOf<String?>(null) }
 
     var expandedListIds by remember { mutableStateOf(setOf<String>()) }
-    var completedExpanded by remember { mutableStateOf(false) }
+    // 已完成列表默认展开（用户可点击标题折叠）。
+    var completedExpanded by remember { mutableStateOf(true) }
     var editingGroup by remember { mutableStateOf<ScheduleListItem.Group?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
@@ -433,6 +435,7 @@ fun ScheduleScreen(
                     currentInput = currentInput,
                     reminderEnabled = reminderEnabled,
                     reminderDateTime = reminderDateTime,
+                    recurrence = quickAddRecurrence,
                     onCurrentInputChange = { currentInput = it },
                     onCommitCurrent = {
                         draftItems = draftItems + DraftItem(text = currentInput.trim())
@@ -460,7 +463,7 @@ fun ScheduleScreen(
                             titles = finalDrafts.map { it.text },
                             reminderDateTime = reminderDateTime,
                             reminderEnabled = reminderEnabled,
-                            isRecurring = quickAddRecurring,
+                            recurrence = quickAddRecurrence,
                             context = context,
                             notificationPermissionLauncher = notificationPermissionLauncher
                         )
@@ -477,10 +480,10 @@ fun ScheduleScreen(
             } else {
                 FloatingActionButton(
                     onClick = {
-                        // 每次重新打开都复位：默认不启用提醒、默认一次性（非每日重复）、提醒时间=当前+1分钟
+                        // 每次重新打开都复位：默认不启用提醒（即无时间待办）、默认不重复、提醒时间=当前+1分钟
                         reminderDateTime = LocalDateTime.of(DateUtils.today(), defaultReminderTime())
                         reminderEnabled = false
-                        quickAddRecurring = false
+                        quickAddRecurrence = Recurrence.NONE
                         isQuickAddActive = true
                     },
                     modifier = Modifier
@@ -505,7 +508,7 @@ fun ScheduleScreen(
                 group = group,
                 isCompleted = group.allCompleted,
                 onDismiss = { editingGroup = null },
-                onSave = { title, items, deletedIds, reminderDateTime, reminderEnabled, isRecurring ->
+                onSave = { title, items, deletedIds, reminderDateTime, reminderEnabled, recurrence ->
                     viewModel.saveListEdit(
                         listId = group.listId,
                         newTitle = title,
@@ -513,7 +516,7 @@ fun ScheduleScreen(
                         deletedIds = deletedIds,
                         reminderDateTime = reminderDateTime,
                         reminderEnabled = reminderEnabled,
-                        isRecurring = isRecurring
+                        recurrence = recurrence
                     )
                     editingGroup = null
                 },
@@ -531,12 +534,12 @@ fun ScheduleScreen(
     if (showReminderDialog) {
         ReminderSettingDialog(
             initialDateTime = reminderDateTime,
-            initialRecurring = quickAddRecurring,
+            initialRecurrence = quickAddRecurrence,
             onDismiss = { showReminderDialog = false },
-            onConfirm = { picked, recurring ->
+            onConfirm = { picked, recurrence ->
                 reminderDateTime = picked
                 reminderEnabled = true
-                quickAddRecurring = recurring
+                quickAddRecurrence = recurrence
                 showReminderDialog = false
                 reminderSetTip = "${DateUtils.monthDay(picked.toLocalDate())} " +
                     DateUtils.hm(picked.toLocalTime())
@@ -594,7 +597,7 @@ internal fun submitQuickAdd(
     titles: List<String>,
     reminderDateTime: LocalDateTime,
     reminderEnabled: Boolean,
-    isRecurring: Boolean,
+    recurrence: Recurrence,
     context: android.content.Context,
     notificationPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
 ) {
@@ -605,9 +608,10 @@ internal fun submitQuickAdd(
     viewModel.addSchedules(
         titles = titles,
         date = reminderDateTime.toLocalDate(),
-        time = reminderDateTime.toLocalTime(),
+        // 未主动设置提醒 → 无时间状态：不写入时间，系统不判逾期，由用户手动完成或删除。
+        time = if (reminderEnabled) reminderDateTime.toLocalTime() else null,
         reminder = reminderEnabled,
-        isRecurring = isRecurring
+        recurrence = if (reminderEnabled) recurrence else Recurrence.NONE
     )
     if (reminderEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
         && !NotificationUtils.hasPermission(context)

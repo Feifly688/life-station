@@ -21,7 +21,7 @@ import com.feiqi.data.entity.ScheduleEntity
         HabitRecordEntity::class,
         MediaEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class FeiQiDatabase : RoomDatabase() {
@@ -123,6 +123,46 @@ abstract class FeiQiDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS index_schedule_completions_listId " +
                         "ON schedule_completions(listId)"
                 )
+            }
+        }
+
+        /**
+         * v8 -> v9：日程重复规则由布尔列 `isRecurring`（只有「每日」一种）升级为枚举列 `recurrence`
+         * （NONE / DAILY / WEEKDAYS / WEEKLY / MONTHLY / YEARLY）。
+         *
+         * 低版本 SQLite 不支持 DROP COLUMN，故沿用 4→5 的做法重建表；
+         * 旧数据映射：isRecurring = 1 → 'DAILY'，否则 'NONE'。
+         */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE schedules_new (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "title TEXT NOT NULL, " +
+                        "date TEXT NOT NULL, " +
+                        "time TEXT, " +
+                        "groupName TEXT NOT NULL, " +
+                        "note TEXT NOT NULL, " +
+                        "reminder INTEGER NOT NULL, " +
+                        "completed INTEGER NOT NULL, " +
+                        "createdAt INTEGER NOT NULL, " +
+                        "listId TEXT, " +
+                        "listTitle TEXT NOT NULL, " +
+                        "itemOrder INTEGER NOT NULL, " +
+                        "lastResetDate TEXT, " +
+                        "completedDate TEXT, " +
+                        "recurrence TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "INSERT INTO schedules_new " +
+                        "(id, title, date, time, groupName, note, reminder, completed, createdAt, " +
+                        "listId, listTitle, itemOrder, lastResetDate, completedDate, recurrence) " +
+                        "SELECT id, title, date, time, groupName, note, reminder, completed, createdAt, " +
+                        "listId, listTitle, itemOrder, lastResetDate, completedDate, " +
+                        "CASE WHEN isRecurring = 1 THEN 'DAILY' ELSE 'NONE' END FROM schedules"
+                )
+                db.execSQL("DROP TABLE schedules")
+                db.execSQL("ALTER TABLE schedules_new RENAME TO schedules")
             }
         }
     }

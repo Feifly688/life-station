@@ -14,6 +14,7 @@ import com.feiqi.utils.BackupManager
 import com.feiqi.utils.ExcelExporter
 import com.feiqi.utils.NotificationUtils
 import com.feiqi.utils.ReminderScheduler
+import com.feiqi.utils.RecurrenceUtils
 import com.feiqi.utils.AppLogger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,10 +39,11 @@ class FeiQiApplication : Application() {
     /**
      * 手机重启或进程被杀会丢失 AlarmManager 里的闹钟，启动时按数据库重排一次。
      *
-     * 每日重复清单的次日重置：若 isRecurring && reminder && !completed 且 date 已早于今天
-     * （即昨天/前天该循环清单未被手动完成），把 date 顺延到今天（时分秒不变）、状态保持
-     * 待完成，使清单在新的一天继续循环提醒。这与用户预期一致——「当天没加入已完成，第二天
-     * 自动重置为待完成，提醒时间顺延到当天」。
+     * 循环清单的「错过后补推」：若 isRecurring && reminder && !completed 且 date 已早于今天
+     * （即该循环清单的应提醒日已过、尚未手动完成），按重复规则把 date 推进到**不早于今天的
+     * 下一个应提醒日**（每天→今天；周一至周五→下一个工作日；每周→本周/下周同星期几；
+     * 每月→本月/下月同日；每年→今年/明年同月日），状态保持待完成，提醒时刻不变。
+     * 与用户预期一致——循环清单不回补历史欠账，直接落到下一个应提醒日继续提醒。
      */
     private fun restoreReminders() {
         appScope.launch {
@@ -49,10 +51,14 @@ class FeiQiApplication : Application() {
                 val repo = container.scheduleRepository
                 val today = com.feiqi.utils.DateUtils.today()
                 val schedules = repo.getAll().first()
-                // 过期循环清单：date < today 的，顺延到今天（只顺延到当天，不无脑推到未来）。
                 val advanced = schedules
                     .filter { it.isRecurring && it.reminder && !it.completed && it.date < today }
-                    .map { it.copy(date = today, lastResetDate = null) }
+                    .map {
+                        it.copy(
+                            date = RecurrenceUtils.advanceToOnOrAfter(it.date, it.recurrence, today),
+                            lastResetDate = null
+                        )
+                    }
                 // 批量写回：整体收敛到一个事务（原本逐条 update 会各开一次事务）。
                 repo.updateBatch(advanced)
                 val advancedById = advanced.associateBy { it.id }
@@ -80,7 +86,8 @@ class AppContainer(context: Context) {
             FeiQiDatabase.MIGRATION_4_5,
             FeiQiDatabase.MIGRATION_5_6,
             FeiQiDatabase.MIGRATION_6_7,
-            FeiQiDatabase.MIGRATION_7_8
+            FeiQiDatabase.MIGRATION_7_8,
+            FeiQiDatabase.MIGRATION_8_9
         )
         .build()
 

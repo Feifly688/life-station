@@ -2,6 +2,7 @@ package com.feiqi.data.repository
 
 import com.feiqi.data.database.ScheduleDao
 import com.feiqi.data.entity.ScheduleEntity
+import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.utils.DateUtils
 import kotlinx.coroutines.flow.Flow
@@ -80,7 +81,7 @@ private fun ScheduleEntity.toModel(): Schedule {
         createdAt = createdAt,
         listId = listId,
         listTitle = listTitle.ifBlank { title },
-        isRecurring = isRecurring,
+        recurrence = Recurrence.from(recurrence),
         itemOrder = itemOrder,
         lastResetDate = lastResetDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
         completedDate = completedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
@@ -100,7 +101,7 @@ private fun Schedule.toEntity(): ScheduleEntity {
         createdAt = createdAt,
         listId = listId,
         listTitle = listTitle.ifBlank { title },
-        isRecurring = isRecurring,
+        recurrence = recurrence.code,
         itemOrder = itemOrder,
         lastResetDate = lastResetDate?.let { DateUtils.iso(it) },
         completedDate = completedDate?.let { DateUtils.iso(it) }
