@@ -6,7 +6,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,8 +34,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,7 +48,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -182,13 +178,15 @@ internal fun QuickAddPanel(
 
     // 已确认的待办达到 2 条及以上 → 本次提交会形成「待办清单」：
     // 面板顶部出现可编辑的清单标题（默认「待办清单」），待办内容默认收起。
-    // 只有 1 条时保持原有形态：直接展示待办内容，不出现标题输入框。
-    val isListMode = draftItems.size >= 2
-    var contentExpanded by remember { mutableStateOf(false) }
-    LaunchedEffect(isListMode) {
-        // 每次进入清单形态都回到「默认收起」；退回单条形态时不处理（下次进入会重置）。
-        if (isListMode) contentExpanded = false
-    }
+    // 标题输入框的显示条件：**本次提交将形成清单**（条目数 ≥ 2）时才出现。
+    // 计数把「正在输入的这一条」也算进去——输入行可见时代表用户正准备写第 N+1 条，
+    // 因此在「写完第 1 条按回车、开始编辑第 2 条」的那一刻（已确认 1 条 + 输入行可见）
+    // 标题框就出现，而不是等到第 2 条也确认之后。
+    // 输入行被收起（退格回到上一条继续编辑）时不计入，此时只按已确认条数判断。
+    // 注意：面板内的待办内容**始终展开显示**（不存在"添加时收起"）；默认收起的是
+    // 添加完成后日程页里的清单卡片（见 ScheduleCards 的 AnimatedVisibility + expandedListIds）。
+    val pendingCount = draftItems.size + if (activeInputVisible) 1 else 0
+    val showListTitle = pendingCount >= 2
 
     Card(
         modifier = Modifier
@@ -199,37 +197,32 @@ internal fun QuickAddPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            // 清单形态（≥2 条）：顶部是可编辑的清单标题 + 待办内容的收起/展开开关。
-            if (isListMode) {
-                QuickAddListHeader(
+            // 将形成清单时才出现：可编辑的清单标题（默认「待办清单」）。
+            if (showListTitle) {
+                QuickAddListTitleField(
                     title = listTitle,
-                    onTitleChange = onListTitleChange,
-                    count = draftItems.size,
-                    expanded = contentExpanded,
-                    onToggleExpand = { contentExpanded = !contentExpanded }
+                    onTitleChange = onListTitleChange
                 )
                 Spacer(modifier = Modifier.height(12.dp))
             }
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // 单条：直接展示待办内容；清单：内容默认收起，展开后可逐条编辑。
-                if (!isListMode || contentExpanded) {
-                    draftItems.forEach { item ->
-                        val itemFocusRequester = remember(item.id) { FocusRequester() }
-                        DisposableEffect(item.id) {
-                            draftFocusRequesters[item.id] = itemFocusRequester
-                            onDispose { draftFocusRequesters.remove(item.id) }
-                        }
-                        DraftItemRow(
-                            item = item,
-                            onTextChange = { newText -> onDraftEdit(item.id, newText) },
-                            onDelete = { deleteDraft(item.id) },
-                            // 行内回车 = 该条编辑完成，光标回到下方新增待办输入行继续录入。
-                            onFinishEdit = { focusActiveInput() },
-                            focusRequester = itemFocusRequester,
-                            cursorAtEnd = pendingCursorAtEnd[item.id] == true,
-                            onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
-                        )
+                // 待办内容始终展开显示，添加过程中逐条可见可编辑。
+                draftItems.forEach { item ->
+                    val itemFocusRequester = remember(item.id) { FocusRequester() }
+                    DisposableEffect(item.id) {
+                        draftFocusRequesters[item.id] = itemFocusRequester
+                        onDispose { draftFocusRequesters.remove(item.id) }
                     }
+                    DraftItemRow(
+                        item = item,
+                        onTextChange = { newText -> onDraftEdit(item.id, newText) },
+                        onDelete = { deleteDraft(item.id) },
+                        // 行内回车 = 该条编辑完成，光标回到下方新增待办输入行继续录入。
+                        onFinishEdit = { focusActiveInput() },
+                        focusRequester = itemFocusRequester,
+                        cursorAtEnd = pendingCursorAtEnd[item.id] == true,
+                        onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
+                    )
                 }
                 if (activeInputVisible) {
                     ActiveInputRow(
@@ -371,18 +364,16 @@ internal fun ActiveInputRow(
 }
 
 /**
- * 清单形态的表头：可编辑的清单标题 + 待办内容的收起/展开开关。
+ * 清单标题输入框（仅在「本次提交将形成清单」时显示）。
  *
- * 仅当待办达到 2 条及以上（会形成清单）时显示；标题默认「待办清单」，
- * 添加过程中就能改，不必先建好再进「编辑清单」重命名。
+ * 标题默认「待办清单」，添加过程中就能改，不必先建好再进「编辑清单」重命名。
+ * 面板内**不含**收起/展开开关——添加时内容始终可见；默认收起的是添加完成后
+ * 日程页里的清单卡片。
  */
 @Composable
-private fun QuickAddListHeader(
+private fun QuickAddListTitleField(
     title: String,
-    onTitleChange: (String) -> Unit,
-    count: Int,
-    expanded: Boolean,
-    onToggleExpand: () -> Unit
+    onTitleChange: (String) -> Unit
 ) {
     Column {
         Text(
@@ -417,32 +408,6 @@ private fun QuickAddListHeader(
         )
         Spacer(modifier = Modifier.height(10.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onToggleExpand() },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.todo_content_label) + " · " +
-                    stringResource(R.string.todo_count_format, count),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Icon(
-                imageVector = if (expanded) {
-                    Icons.Filled.KeyboardArrowUp
-                } else {
-                    Icons.Filled.KeyboardArrowDown
-                },
-                contentDescription = stringResource(
-                    if (expanded) R.string.collapse else R.string.expand
-                ),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 
