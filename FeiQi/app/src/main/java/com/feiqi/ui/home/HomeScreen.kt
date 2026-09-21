@@ -1,0 +1,969 @@
+package com.feiqi.ui.home
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.feiqi.R
+import com.feiqi.data.model.AccountRecord
+import com.feiqi.data.model.Media
+import com.feiqi.data.model.MediaType
+import com.feiqi.data.model.Schedule
+import com.feiqi.data.model.ScheduleListItem
+import com.feiqi.data.model.ShoppingItem
+import com.feiqi.ui.components.AccountListItem
+import com.feiqi.ui.components.DeleteConfirmHost
+import com.feiqi.ui.components.EmptyState
+import com.feiqi.ui.components.RecordFormDialog
+import com.feiqi.ui.components.rememberDeleteConfirm
+import com.feiqi.ui.media.CoverPreviewDialog
+import com.feiqi.ui.theme.CardAmber
+import com.feiqi.ui.theme.CardGreen
+import com.feiqi.ui.theme.CardRed
+import com.feiqi.ui.theme.ExpenseRed
+import com.feiqi.ui.theme.IncomeGreen
+import com.feiqi.ui.theme.OnPrimary
+import com.feiqi.ui.theme.OnSurfaceVariant
+import com.feiqi.ui.theme.Primary
+import com.feiqi.ui.theme.PrimaryContainer
+import com.feiqi.ui.theme.SurfaceVariant
+import com.feiqi.ui.theme.Tertiary
+import java.text.DecimalFormat
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ImageBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+fun HomeScreen(
+    viewModel: HomeViewModel,
+    onOpenAccounting: () -> Unit,
+    onOpenSchedule: () -> Unit,
+    onOpenHealth: () -> Unit,
+    onOpenMedia: () -> Unit,
+    onSettings: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var showShoppingDialog by remember { mutableStateOf(false) }
+    var shoppingTabBought by remember { mutableStateOf(false) }
+    var previewMedia by remember { mutableStateOf<Media?>(null) }
+    var editingRecord by remember { mutableStateOf<AccountRecord?>(null) }
+    val deleteConfirm = rememberDeleteConfirm()
+    val deleteShoppingText = stringResource(R.string.delete_shopping_confirm)
+    val clearBoughtText = stringResource(R.string.clear_bought_confirm)
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val scope = rememberCoroutineScope()
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullState = rememberPullRefreshState(
+        refreshing = isRefreshing,
+        onRefresh = {
+            // 首页数据来自 Room/DataStore 的实时 Flow，始终自动同步，无需手动重算。
+            // 下拉手势仅作轻量反馈：短暂展示指示器后收起。
+            scope.launch {
+                isRefreshing = true
+                delay(400)
+                isRefreshing = false
+            }
+        }
+    )
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(pullState),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = uiState.greeting,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = uiState.dateLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                IconButton(onClick = onSettings) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = stringResource(R.string.settings)
+                    )
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = stringResource(R.string.home_headline),
+                style = MaterialTheme.typography.headlineLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
+        item {
+            LifeIndexCard(
+                score = uiState.lifeIndex,
+                desc = stringResource(R.string.life_index_desc),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    label = stringResource(R.string.month_expense),
+                    value = "¥${formatMoney(uiState.monthExpense)}",
+                    hint = stringResource(R.string.month_expense_hint),
+                    background = CardRed,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenAccounting
+                )
+                StatCard(
+                    label = stringResource(R.string.latest_weight),
+                    value = uiState.latestWeight?.let { "${it.weight}kg" } ?: "--",
+                    hint = stringResource(R.string.latest_weight_hint),
+                    background = CardGreen,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenHealth
+                )
+                StatCard(
+                    label = stringResource(R.string.today_todo),
+                    value = "${uiState.todayTodoCount}件",
+                    hint = stringResource(R.string.today_todo_hint),
+                    background = CardAmber,
+                    modifier = Modifier.weight(1f),
+                    onClick = onOpenSchedule
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // ---------------- 今日待办（单条日程 + 待办清单） ----------------
+        item {
+            SectionHeader(
+                title = stringResource(R.string.today_todo),
+                action = stringResource(R.string.all),
+                onAction = onOpenSchedule
+            )
+            if (uiState.todayTodoItems.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.today_todo_empty_title),
+                    description = stringResource(R.string.today_todo_empty_desc),
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    uiState.todayTodoItems.forEach { item ->
+                        when (item) {
+                            is ScheduleListItem.Single -> HomeTodoRow(
+                                item = item.schedule,
+                                onClick = onOpenSchedule
+                            )
+
+                            is ScheduleListItem.Group -> HomeTodoGroupCard(
+                                group = item,
+                                onClick = onOpenSchedule
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---------------- 购买物品（待买 / 已买） ----------------
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionHeader(
+                title = stringResource(R.string.shopping_list),
+                action = stringResource(R.string.add_shopping_item),
+                onAction = { showShoppingDialog = true }
+            )
+            ShoppingCard(
+                toBuy = uiState.shoppingToBuy,
+                bought = uiState.shoppingBought,
+                showBought = shoppingTabBought,
+                onTabChange = { shoppingTabBought = it },
+                onToggle = viewModel::toggleShoppingItem,
+                onDelete = { id ->
+                    deleteConfirm.request(deleteShoppingText) {
+                        viewModel.deleteShoppingItem(id)
+                    }
+                },
+                onClearBought = {
+                    deleteConfirm.request(clearBoughtText) {
+                        viewModel.clearBoughtItems()
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+        }
+
+        // ---------------- 书影音（最近作品） ----------------
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionHeader(
+                title = stringResource(R.string.media_collection),
+                action = stringResource(R.string.all),
+                onAction = onOpenMedia
+            )
+            if (uiState.recentMedia.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.media_empty_title),
+                    description = stringResource(R.string.media_empty_desc),
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .height((if (uiState.recentMedia.size > 2) 300 else 144).dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    userScrollEnabled = false
+                ) {
+                    items(uiState.recentMedia, key = { it.id }) { media ->
+                        HomeMediaCard(
+                            media = media,
+                            onPreview = { if (!media.coverUri.isNullOrBlank()) previewMedia = media },
+                            onOpenMedia = onOpenMedia
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+            SectionHeader(
+                title = stringResource(R.string.recent_trace),
+                action = stringResource(R.string.all),
+                onAction = onOpenAccounting
+            )
+            if (uiState.recentRecords.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.empty_state_title),
+                    description = stringResource(R.string.empty_state_desc),
+                    modifier = Modifier.padding(16.dp)
+                )
+            } else {
+                uiState.recentRecords.forEach { record: AccountRecord ->
+                    AccountListItem(
+                        record = record,
+                        onClick = { editingRecord = record },
+                        onLongClick = { editingRecord = record },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
+            QuoteCard(quote = uiState.quote)
+        }
+        }
+
+        PullRefreshIndicator(
+            refreshing = isRefreshing,
+            state = pullState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = MaterialTheme.colorScheme.surface,
+            contentColor = Primary
+        )
+
+        if (showShoppingDialog) {
+            AddShoppingDialog(
+                onConfirm = { name, price ->
+                    viewModel.addShoppingItem(name, price)
+                    showShoppingDialog = false
+                },
+                onDismiss = { showShoppingDialog = false }
+            )
+        }
+
+        previewMedia?.let { media ->
+            CoverPreviewDialog(
+                coverUri = media.coverUri!!,
+                type = media.type,
+                onDismiss = { previewMedia = null }
+            )
+        }
+
+        editingRecord?.let { record ->
+            RecordFormDialog(
+                record = record,
+                onDismiss = { editingRecord = null },
+                onSave = { type, amountText, category, dateTime, note ->
+                    val amount = amountText.toDoubleOrNull() ?: 0.0
+                    viewModel.saveRecord(
+                        record.copy(
+                            type = type,
+                            amount = amount,
+                            category = category,
+                            dateTime = dateTime,
+                            note = note
+                        )
+                    )
+                    editingRecord = null
+                }
+            )
+        }
+
+        DeleteConfirmHost(state = deleteConfirm)
+    }
+}
+
+@Composable
+private fun LifeIndexCard(score: Int, desc: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        colors = CardDefaults.cardColors(containerColor = Primary),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = stringResource(R.string.life_index),
+                style = MaterialTheme.typography.labelLarge,
+                color = OnPrimary.copy(alpha = 0.8f)
+            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "$score",
+                    style = MaterialTheme.typography.displayLarge,
+                    color = OnPrimary
+                )
+                Text(
+                    text = stringResource(R.string.life_index_full),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = OnPrimary.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                )
+            }
+            Text(
+                text = desc,
+                style = MaterialTheme.typography.bodyMedium,
+                color = OnPrimary.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatCard(
+    label: String,
+    value: String,
+    hint: String,
+    background: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    Card(
+        modifier = if (onClick != null) {
+            modifier.height(100.dp).clickable { onClick() }
+        } else {
+            modifier.height(100.dp)
+        },
+        colors = CardDefaults.cardColors(containerColor = background),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuoteCard(quote: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(20.dp)
+    ) {
+        Text(
+            text = quote,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    }
+}
+
+@Composable
+private fun HomeTodoRow(item: Schedule, onClick: () -> Unit) {
+    val done = item.completed
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (done) PrimaryContainer else MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (done) OnSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                val timeText = item.time?.let { "${it.hour}:${String.format("%02d", it.minute)}" }
+                    ?: stringResource(R.string.all_day)
+                Text(
+                    text = "$timeText · ${item.groupName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OnSurfaceVariant
+                )
+            }
+            val color = if (done) Tertiary else MaterialTheme.colorScheme.outline
+            Icon(
+                imageVector = if (done) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** 首页展示一整份待办清单：标题 + 完成进度 + 前几条条目预览。 */
+@Composable
+private fun HomeTodoGroupCard(group: ScheduleListItem.Group, onClick: () -> Unit) {
+    val allDone = group.allCompleted
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (allDone) PrimaryContainer else MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(SurfaceVariant)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.group),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = OnSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = group.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (allDone) OnSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = "${group.completedCount}/${group.total}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (allDone) Tertiary else Primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            group.items.take(3).forEach { item ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (item.completed) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                        contentDescription = null,
+                        tint = if (item.completed) Tertiary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (item.completed) OnSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        textDecoration = if (item.completed) TextDecoration.LineThrough else null,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            if (group.total > 3) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "还有 ${group.total - 3} 项…",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+// ---------------- 购买物品 ----------------
+
+@Composable
+private fun ShoppingCard(
+    toBuy: List<ShoppingItem>,
+    bought: List<ShoppingItem>,
+    showBought: Boolean,
+    onTabChange: (Boolean) -> Unit,
+    onToggle: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onClearBought: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceVariant)
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    ShoppingTab(
+                        text = stringResource(R.string.to_buy_count, toBuy.size),
+                        selected = !showBought,
+                        onClick = { onTabChange(false) }
+                    )
+                    ShoppingTab(
+                        text = stringResource(R.string.bought_count, bought.size),
+                        selected = showBought,
+                        onClick = { onTabChange(true) }
+                    )
+                }
+                if (showBought && bought.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.clear_bought),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ExpenseRed,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onClearBought() }
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val list = if (showBought) bought else toBuy
+            if (list.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 22.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (showBought) {
+                            stringResource(R.string.shopping_empty_bought)
+                        } else {
+                            stringResource(R.string.shopping_empty_to_buy)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OnSurfaceVariant
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    list.forEach { item ->
+                        ShoppingRow(
+                            item = item,
+                            onToggle = { onToggle(item.id) },
+                            onDelete = { onDelete(item.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShoppingTab(text: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) Primary else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) OnPrimary else OnSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ShoppingRow(
+    item: ShoppingItem,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = item.bought,
+            onCheckedChange = { onToggle() },
+            colors = CheckboxDefaults.colors(checkedColor = Tertiary)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (item.bought) OnSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                textDecoration = if (item.bought) TextDecoration.LineThrough else null,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (item.price > 0) {
+                Text(
+                    text = "¥${formatMoney(item.price)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = OnSurfaceVariant
+                )
+            }
+        }
+        IconButton(onClick = onDelete) {
+            Icon(
+                imageVector = Icons.Outlined.Delete,
+                contentDescription = stringResource(R.string.delete),
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddShoppingDialog(
+    onConfirm: (name: String, price: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_shopping_item)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.shopping_name_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { price = it },
+                    label = { Text(stringResource(R.string.shopping_price_hint)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name, price) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        }
+    )
+}
+
+@Composable
+private fun SectionHeader(title: String, action: String, onAction: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = action,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { onAction() }
+        )
+    }
+}
+
+private fun formatMoney(value: Double): String {
+    return DecimalFormat("#,##0.00").format(value)
+}
+
+/** 首页书影音卡片：封面填满卡片；点击打开预览（有封面）或跳转书影音页（无封面）。 */
+@Composable
+private fun HomeMediaCard(
+    media: Media,
+    onPreview: () -> Unit,
+    onOpenMedia: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cover = rememberHomeCover(media.coverUri)
+    val tint = homeMediaTint(media.type)
+    val hasCover = !media.coverUri.isNullOrBlank()
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(144.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable { if (hasCover) onPreview() else onOpenMedia() }
+        ) {
+            if (cover != null) {
+                Image(
+                    bitmap = cover,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(tint.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(media.type.label, style = MaterialTheme.typography.titleMedium, color = tint)
+                }
+            }
+            // 底部渐变文字区：标题 + 类型
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomStart)
+                    .background(Color(0x66000000))
+                    .padding(10.dp)
+            ) {
+                Text(
+                    text = media.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${media.type.label} · ${media.status.label}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberHomeCover(path: String?): ImageBitmap? {
+    var bitmap by remember(path) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(path) {
+        bitmap = null
+        if (!path.isNullOrBlank()) {
+            val bmp = withContext(Dispatchers.IO) {
+                runCatching {
+                    val opts = BitmapFactory.Options().apply {
+                        inSampleSize = 2 // 首页缩略图，简单降采样即可
+                    }
+                    BitmapFactory.decodeFile(path, opts)?.asImageBitmap()
+                }.getOrNull()
+            }
+            bitmap = bmp
+        }
+    }
+    return bitmap
+}
+
+private fun homeMediaTint(type: MediaType): Color = when (type) {
+    MediaType.MOVIE -> Color(0xFF6D8CC0)
+    MediaType.TV -> Color(0xFFB07CC6)
+    MediaType.BOOK -> Color(0xFF7FB069)
+    MediaType.MUSIC -> Color(0xFFE08BB0)
+    else -> Color(0xFFB0A08C)
+}

@@ -1,0 +1,19 @@
+# Gradle / 构建产物
+.gradle/
+build/
+*.apk.*.tmp
+
+# IDE
+.idea/
+*.iml
+captures/
+
+# 本机相关配置（SDK 路径等）
+local.properties
+
+# AI 助手工作数据（非项目内容）
+.workbuddy/
+
+# 操作系统
+.DS_Store
+Thumbs.db

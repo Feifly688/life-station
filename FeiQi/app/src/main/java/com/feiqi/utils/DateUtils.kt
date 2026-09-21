@@ -1,0 +1,80 @@
+package com.feiqi.utils
+
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+object DateUtils {
+    private val isoFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
+    private val cnMonthDay: DateTimeFormatter = DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)
+    private val cnDate: DateTimeFormatter = DateTimeFormatter.ofPattern("M月d日 E", Locale.CHINA)
+    private val hms: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+    private val hm: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    private val fullDateTime: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.CHINA)
+    private val shortDateTime: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("M月d日 HH:mm:ss", Locale.CHINA)
+
+    fun today(): LocalDate = LocalDate.now()
+
+    fun now(): LocalDateTime = LocalDateTime.now().withNano(0)
+
+    fun iso(date: LocalDate): String = date.format(isoFormatter)
+
+    fun parseIso(value: String): LocalDate = LocalDate.parse(value, isoFormatter)
+
+    fun hms(time: LocalTime): String = time.format(hms)
+
+    fun hm(time: LocalTime): String = time.format(hm)
+
+    fun fullDateTime(value: LocalDateTime): String = value.format(fullDateTime)
+
+    fun shortDateTime(value: LocalDateTime): String = value.format(shortDateTime)
+
+    fun friendly(date: LocalDate): String {
+        val today = today()
+        return when (date) {
+            today -> "今天"
+            today.minusDays(1) -> "昨天"
+            today.plusDays(1) -> "明天"
+            else -> date.format(cnDate)
+        }
+    }
+
+    fun monthDay(date: LocalDate): String = date.format(cnMonthDay)
+
+    fun monthStart(date: LocalDate): LocalDate = date.withDayOfMonth(1)
+
+    fun monthEnd(date: LocalDate): LocalDate = date.withDayOfMonth(date.lengthOfMonth())
+
+    fun weekDays(date: LocalDate): List<LocalDate> {
+        // 用 ISO DayOfWeek 直接算出本周周一，避免依赖 WeekFields 的本地化周起始（中文习惯周一），
+        // 否则在部分 JVM/设备 locale 数据下可能误判为周日起始，导致整周偏移。
+        val monday = date.minusDays((date.dayOfWeek.value - DayOfWeek.MONDAY.value).toLong())
+        return (0 until 7).map { monday.plusDays(it.toLong()) }
+    }
+
+    fun greeting(): String {
+        val hour = java.time.LocalTime.now().hour
+        return when (hour) {
+            in 5..10 -> "早安，慢慢来"
+            in 11..13 -> "午安，刚刚好"
+            in 14..17 -> "下午好，慢慢来"
+            in 18..21 -> "晚上好，今天辛苦了"
+            else -> "夜深了，早点休息"
+        }
+    }
+
+    fun atmosphere(date: LocalDate): String {
+        val dayOfMonth = date.dayOfMonth
+        return when {
+            dayOfMonth <= 5 -> "新的一个月，从一件小事开始"
+            dayOfMonth <= 15 -> "月中了，给自己一点掌声"
+            dayOfMonth <= 25 -> "月底临近，慢慢收尾"
+            else -> "月末了，整理一下再出发"
+        }
+    }
+}
