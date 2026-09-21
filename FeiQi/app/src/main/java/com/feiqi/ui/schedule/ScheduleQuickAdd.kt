@@ -7,7 +7,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +51,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,7 +78,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -136,26 +133,30 @@ internal fun QuickAddPanel(
     onDismiss: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
     val draftFocusRequesters = remember { mutableStateMapOf<String, FocusRequester>() }
-    // 编辑态状态提升到此处，便于在删除/回跳时把光标精确放到上一条内容的末尾。
-    var editingDraftId by remember { mutableStateOf<String?>(null) }
-    var editingText by remember { mutableStateOf(TextFieldValue("")) }
-    // 新增待办输入行是否可见：退格回退到上一条待办编辑时收起（避免残留占位提示），
-    // 编辑完成（回车确认）或删到首条后再显示。
+    // 删除/退格回跳后需要把光标放到目标行内容的末尾（而非最前面）：该行真正获焦时消费本标记。
+    val pendingCursorAtEnd = remember { mutableStateMapOf<String, Boolean>() }
+    // 新增待办输入行是否可见：退格回退到上一条待办时收起（避免残留占位提示）。
     var activeInputVisible by remember { mutableStateOf(true) }
 
-    fun startEdit(id: String, atEnd: Boolean) {
-        val draft = draftItems.find { it.id == id } ?: return
-        editingText = if (atEnd) {
-            TextFieldValue(draft.text, selection = TextRange(draft.text.length))
-        } else {
-            TextFieldValue(draft.text)
+    /** 把焦点送到新增待办输入行（并确保软键盘在）。 */
+    fun focusActiveInput() {
+        activeInputVisible = true
+        coroutineScope.launch {
+            delay(60)
+            focusRequester.safeRequestFocus()
+            keyboardController.safeShow()
         }
-        editingDraftId = id
-        // 进入编辑态后请求焦点：atEnd=true 时光标落在内容末尾，否则在前端。
+    }
+
+    /** 把焦点送到某条待办行；[atEnd] 为真时光标落到内容末尾。 */
+    fun focusDraft(id: String, atEnd: Boolean) {
+        if (atEnd) pendingCursorAtEnd[id] = true
         coroutineScope.launch {
             delay(60)
             draftFocusRequesters[id]?.safeRequestFocus()
+            keyboardController.safeShow()
         }
     }
 
@@ -164,19 +165,16 @@ internal fun QuickAddPanel(
         val idx = draftItems.indexOfFirst { it.id == id }
         onDraftDelete(id)
         val prevId = if (idx > 0) draftItems.getOrNull(idx - 1)?.id else null
-        editingDraftId = null
-        editingText = TextFieldValue("")
         if (prevId != null) {
-            startEdit(prevId, atEnd = true)
+            focusDraft(prevId, atEnd = true)
         } else {
             // 已删到首条：恢复并显示新增待办输入行，光标落到其上。
-            activeInputVisible = true
-            coroutineScope.launch {
-                delay(60)
-                focusRequester.safeRequestFocus()
-            }
+            focusActiveInput()
         }
     }
+
+    // 「完成」可用性：当前输入行或任意一条待办有内容才允许提交（空内容时按钮置灰不可点）。
+    val canSubmit = currentInput.isNotBlank() || draftItems.any { it.text.isNotBlank() }
 
     Card(
         modifier = Modifier
@@ -194,28 +192,15 @@ internal fun QuickAddPanel(
                         draftFocusRequesters[item.id] = itemFocusRequester
                         onDispose { draftFocusRequesters.remove(item.id) }
                     }
-                    val isEditing = editingDraftId == item.id
                     DraftItemRow(
                         item = item,
-                        isEditing = isEditing,
-                        editingText = if (isEditing) editingText else TextFieldValue(item.text),
-                        onEditingTextChange = { newVal ->
-                            editingText = newVal
-                            onDraftEdit(item.id, newVal.text)
-                        },
-                        onStartEdit = { startEdit(item.id, atEnd = false) },
-                        onFinishEdit = {
-                            // 编辑确认后：退出编辑态，并让光标落到下方的新增待办输入行。
-                            editingDraftId = null
-                            editingText = TextFieldValue("")
-                            activeInputVisible = true
-                            coroutineScope.launch {
-                                delay(60)
-                                focusRequester.safeRequestFocus()
-                            }
-                        },
+                        onTextChange = { newText -> onDraftEdit(item.id, newText) },
                         onDelete = { deleteDraft(item.id) },
-                        focusRequester = itemFocusRequester
+                        // 行内回车 = 该条编辑完成，光标回到下方新增待办输入行继续录入。
+                        onFinishEdit = { focusActiveInput() },
+                        focusRequester = itemFocusRequester,
+                        cursorAtEnd = pendingCursorAtEnd[item.id] == true,
+                        onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
                     )
                 }
                 if (activeInputVisible) {
@@ -228,7 +213,7 @@ internal fun QuickAddPanel(
                             // 光标回退到上一条已添加待办末尾时，收起本行（不再残留占位提示）。
                             draftItems.lastOrNull()?.let { last ->
                                 activeInputVisible = false
-                                startEdit(last.id, atEnd = true)
+                                focusDraft(last.id, atEnd = true)
                             }
                         }
                     )
@@ -278,10 +263,11 @@ internal fun QuickAddPanel(
                             style = MaterialTheme.typography.bodyLarge
                         )
                     }
-                    TextButton(onClick = onFinish) {
+                    // 内容为空时禁用（置灰且不可点）：只有当前输入行或任一条待办有内容才可提交。
+                    TextButton(onClick = onFinish, enabled = canSubmit) {
                         Text(
                             text = stringResource(R.string.finish),
-                            color = Primary,
+                            color = if (canSubmit) Primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium,
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -291,17 +277,6 @@ internal fun QuickAddPanel(
         }
     }
 
-    LaunchedEffect(draftItems.size) {
-        if (draftItems.isNotEmpty()) {
-            val last = draftItems.last()
-            // 仅当最新一条处于编辑态时才聚焦：否则其 FocusRequester 未绑定到可聚焦节点，
-            // 直接 requestFocus() 会抛 IllegalStateException（小窗/多窗口下更易触发）导致闪退。
-            if (editingDraftId == last.id) {
-                delay(60)
-                draftFocusRequesters[last.id]?.safeRequestFocus()
-            }
-        }
-    }
 }
 
 @Composable
@@ -367,17 +342,28 @@ internal fun ActiveInputRow(
     }
 }
 
+/**
+ * 待办行的名称输入。
+ *
+ * **每一行本身就是输入框**（不再有「静态文本 → 点一下切成输入框」的模式切换）：
+ * 添加待办的过程中点哪条就能改哪条的名称，不需要先提交再去修改。
+ * - 点击行内任意位置即可把光标落到该行（BasicTextField 原生行为，无需手动请求焦点）；
+ * - 内容清空后再退格一次 = 删除该行；
+ * - 软键盘回车 = 该行编辑完成（内容已实时回传），焦点回到下方新增待办输入行。
+ */
 @Composable
 internal fun DraftItemRow(
     item: DraftItem,
-    isEditing: Boolean,
-    editingText: TextFieldValue,
-    onEditingTextChange: (TextFieldValue) -> Unit,
-    onStartEdit: () -> Unit,
-    onFinishEdit: () -> Unit,
+    onTextChange: (String) -> Unit,
     onDelete: () -> Unit,
-    focusRequester: FocusRequester
+    onFinishEdit: () -> Unit,
+    focusRequester: FocusRequester,
+    cursorAtEnd: Boolean,
+    onCursorAtEndConsumed: () -> Unit
 ) {
+    // 行内文本以本地 TextFieldValue 承载（需要光标位置），变更即时回传给上层草稿列表。
+    var value by remember(item.id) { mutableStateOf(TextFieldValue(item.text)) }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -388,48 +374,45 @@ internal fun DraftItemRow(
             tint = Outline,
             modifier = Modifier.size(28.dp)
         )
-        if (isEditing) {
-            BasicTextField(
-                value = editingText,
-                onValueChange = { newVal -> onEditingTextChange(newVal) },
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester)
-                    .onKeyEvent { event ->
-                        // 内容已清空后再退格一次即移除该行（输入法删除，无需确认）。
-                        if (event.key == Key.Backspace && editingText.text.isEmpty()) {
-                            onDelete()
-                            true
-                        } else {
-                            false
-                        }
-                    },
-                textStyle = TextStyle(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 18.sp
-                ),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    // 内容为空时按回车等同删除该行；否则完成编辑（内容已实时保存）。
-                    if (editingText.text.isBlank()) {
-                        onDelete()
-                    } else {
-                        onFinishEdit()
+        BasicTextField(
+            value = value,
+            onValueChange = { newVal ->
+                value = newVal
+                onTextChange(newVal.text)
+            },
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(focusRequester)
+                .onFocusChanged { state ->
+                    // 删除/退格回跳后的目标行：真正获焦时把光标移到末尾，然后消费标记。
+                    if (state.isFocused && cursorAtEnd) {
+                        value = TextFieldValue(value.text, TextRange(value.text.length))
+                        onCursorAtEndConsumed()
                     }
-                }),
-                singleLine = true
-            )
-        } else {
-            Text(
-                text = item.text,
-                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
+                }
+                .onKeyEvent { event ->
+                    // 内容已清空后再退格一次即移除该行（输入法删除，无需确认）。
+                    if (event.key == Key.Backspace && value.text.isEmpty()) {
+                        onDelete()
+                        true
+                    } else {
+                        false
+                    }
+                },
+            textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { onStartEdit() },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+                fontSize = 18.sp
+            ),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                // 内容为空时按回车等同删除该行；否则完成编辑（内容已实时保存）。
+                if (value.text.isBlank()) {
+                    onDelete()
+                } else {
+                    onFinishEdit()
+                }
+            }),
+            singleLine = true
+        )
     }
 }

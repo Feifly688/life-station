@@ -438,8 +438,12 @@ fun ScheduleScreen(
                     recurrence = quickAddRecurrence,
                     onCurrentInputChange = { currentInput = it },
                     onCommitCurrent = {
-                        draftItems = draftItems + DraftItem(text = currentInput.trim())
-                        currentInput = ""
+                        // 空内容不入草稿行（避免留下一个空输入框）；与「完成」按钮的可用性判断一致。
+                        val text = currentInput.trim()
+                        if (text.isNotEmpty()) {
+                            draftItems = draftItems + DraftItem(text = text)
+                            currentInput = ""
+                        }
                     },
                     onDraftEdit = { id, newText ->
                         draftItems = draftItems.map {
