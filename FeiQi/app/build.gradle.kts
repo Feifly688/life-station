@@ -1,8 +1,27 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
+
+// ── 发布签名（安全约定，详见仓库根 SECURITY.md）──────────────────────────────
+// 口令与密钥路径**只**从仓库外的 keystore.properties 读取，绝不入库：
+//   storeFile=/绝对路径/feiqi-release.jks   （keystore 建议放在仓库目录之外）
+//   storePassword=… / keyAlias=… / keyPassword=…
+// 该文件不存在时（例如他人 clone、CI 无密钥环境）自动回退到 debug 签名，构建不会中断。
+// 注意：Gradle Kotlin DSL 里不能写 `java.util.Properties`（`java` 会被解析成项目扩展），须顶部 import。
+val keystorePropsFile: File = rootProject.file("keystore.properties")
+val keystoreProps = Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.inputStream().use { stream -> keystoreProps.load(stream) }
+}
+val releaseStoreFile: File? = keystoreProps.getProperty("storeFile")?.let { path ->
+    rootProject.file(path)
+}
+val hasReleaseSigning: Boolean = releaseStoreFile?.exists() == true
 
 android {
     namespace = "com.feiqi"
@@ -21,6 +40,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -28,6 +58,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 有发布密钥就用发布密钥；否则回退 debug（仅本机自测，勿公开分发）。
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {

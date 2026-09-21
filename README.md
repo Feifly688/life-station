@@ -53,6 +53,19 @@ FeiQi/
 
 - 用 **Android Studio** 打开 `FeiQi/` 直接运行 / 打包即可；
 - 或用本地 Gradle 执行 `:app:assembleDebug`，产物位于 `app/build/outputs/apk/debug/app-debug.apk`。
+- **发布构建**：执行 `:app:assembleRelease`。若在 `FeiQi/keystore.properties`（**不提交**）中配置了发布密钥，即用发布密钥签名；未配置时自动回退 debug 签名，便于他人直接构建。详见 [SECURITY.md](SECURITY.md)。
+
+<br>
+
+## 安全与校验
+
+安全基线、密钥与签名文件保管、备份与应急响应规范见 **[SECURITY.md](SECURITY.md)**。
+
+下载安装包后请核对完整性（每个 Release 的说明中都附有 SHA-256）：
+
+```bash
+sha256sum feiqi-vX.Y.Z.apk
+```
 
 <br>
 
