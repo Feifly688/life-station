@@ -41,3 +41,7 @@ captures/
 # ── 操作系统 ─────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# 代理拦截 git push 时的 API 兜底工具（本机脚本，不入库）
+.api_push.py
+.tmp_rel/
