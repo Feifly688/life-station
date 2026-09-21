@@ -32,10 +32,10 @@
 
 ```bash
 cd QixiLife
-./gradlew assembleDebug
+gradle assembleDebug
 ```
 
-产物同上。Release 版需自行配置签名 keystore。
+产物同上。Release 版需自行配置签名 keystore；未配置签名时 Gradle 只能生成未签名 APK。
 
 ## 技术说明
 

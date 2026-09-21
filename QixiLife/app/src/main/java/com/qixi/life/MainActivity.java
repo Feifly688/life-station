@@ -7,18 +7,16 @@ import android.content.ContentValues;
 import android.provider.MediaStore;
 import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.provider.OpenableColumns;
 import android.text.TextUtils;
 import android.view.View;
-import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -31,7 +29,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 public class MainActivity extends AppCompatActivity {
@@ -84,7 +81,18 @@ public class MainActivity extends AppCompatActivity {
         // 备份导出：JS 调用原生写文件
         webView.addJavascriptInterface(new WebAppInterface(this), "Android");
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return openOutsideApp(request.getUrl());
+            }
+
+            @Override
+            @SuppressWarnings("deprecation")
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return openOutsideApp(Uri.parse(url));
+            }
+        });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onShowFileChooser(WebView view,
@@ -136,10 +144,31 @@ public class MainActivity extends AppCompatActivity {
             int idx = disposition.indexOf("filename=");
             if (idx >= 0) {
                 String name = disposition.substring(idx + 9).replace("\"", "").trim();
-                if (name.length() > 0) return name;
+                if (name.length() > 0) return sanitizeFilename(name);
             }
         }
-        return url.substring(url.lastIndexOf('/') + 1);
+        return sanitizeFilename(url.substring(url.lastIndexOf('/') + 1));
+    }
+
+    private boolean openOutsideApp(Uri uri) {
+        String scheme = uri.getScheme();
+        if ("file".equalsIgnoreCase(scheme)
+                && uri.toString().startsWith("file:///android_asset/")) {
+            return false;
+        }
+        if ("about".equalsIgnoreCase(scheme)) return false;
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开该链接", Toast.LENGTH_SHORT).show();
+        }
+        // 不允许外部页面留在带有 Android JS 接口的 WebView 中。
+        return true;
+    }
+
+    private static String sanitizeFilename(String filename) {
+        String sanitized = filename.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        return sanitized.isEmpty() ? "download" : sanitized;
     }
 
     @Override
@@ -151,11 +180,20 @@ public class MainActivity extends AppCompatActivity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
+        if (webView == null) {
             super.onBackPressed();
+            return;
         }
+
+        // 这是一个单页应用，WebView 历史并不反映应用内页面。
+        // 先让页面关闭弹层或返回上一级，只有首页才退出 Activity。
+        webView.evaluateJavascript(
+                "(window.handleAndroidBack && window.handleAndroidBack()) ? 'handled' : 'exit'",
+                value -> {
+                    if (!"\"handled\"".equals(value) && !isFinishing()) {
+                        MainActivity.super.onBackPressed();
+                    }
+                });
     }
 
     @Override
@@ -234,6 +272,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void exportFile(String filename, String content, String mime) {
+            filename = sanitizeFilename(filename);
             byte[] data = content.getBytes(StandardCharsets.UTF_8);
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -245,7 +284,9 @@ public class MainActivity extends AppCompatActivity {
                     ContentResolver resolver = ctx.getContentResolver();
                     // 同名文件先删除避免重复
                     resolver.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                            MediaStore.Downloads.DISPLAY_NAME + "=?", new String[]{filename});
+                            MediaStore.Downloads.DISPLAY_NAME + "=? AND "
+                                    + MediaStore.Downloads.RELATIVE_PATH + "=?",
+                            new String[]{filename, Environment.DIRECTORY_DOWNLOADS + "/QiFile"});
                     Uri uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
                     if (uri != null) {
                         java.io.OutputStream os = resolver.openOutputStream(uri);
