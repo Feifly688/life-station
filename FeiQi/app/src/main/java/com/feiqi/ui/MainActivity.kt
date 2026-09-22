@@ -41,14 +41,15 @@ import com.feiqi.ui.theme.FeiQiTheme
 class MainActivity : ComponentActivity() {
 
     /**
-     * 每次 App 进入前台静默收集新语录（去重后追加到本地语录集）。
-     * 仓库内部自行切 IO、按 30 分钟节流、失败只写日志 —— 不打扰用户、无需任何手动操作。
+     * 语录集周更入口：**仅当今天是周一且本周还没更新过**时才真正联网（每次新增 5~10 条）。
+     * 其余时间调用会立即返回，因此这里挂在 onStart 上没有额外开销。
+     * 仓库内部自行切 IO、失败只写日志 —— 不打扰用户、无需任何手动操作。
      */
     override fun onStart() {
         super.onStart()
         val repository = (application as FeiQiApplication).container.quoteRepository
         lifecycleScope.launch {
-            runCatching { repository.collectNewQuotes() }
+            runCatching { repository.collectNewQuotesIfDue() }
         }
     }
 

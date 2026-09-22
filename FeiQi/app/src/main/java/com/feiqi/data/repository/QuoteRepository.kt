@@ -22,7 +22,10 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.UnknownHostException
+import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+import kotlin.random.Random
 import javax.net.ssl.SSLException
 
 /** 生效语录集的来源（内置兜底 / 本地缓存 / 远程基础集）。 */
@@ -53,7 +56,7 @@ data class QuoteState(
  * | 集合 | 来源 | 更新方式 |
  * | --- | --- | --- |
  * | 基础集 | 内置 [Quotes.builtIn] 或仓库根目录 `quotes.json` | 距上次成功 ≥ [BASE_REFRESH_INTERVAL_MS]（7 天）时静默更新 |
- * | 自动收集集 | 一言接口「文学 + 诗词」类别随机取句 | **每次 App 进入前台**静默收集，去重后追加（[collectNewQuotes]） |
+ * | 自动收集集 | 一言接口「文学 + 诗词」类别随机取句 | **每周一首次打开 App**静默收集 5~10 条，去重后追加（[collectNewQuotesIfDue]） |
  *
  * 生效集合 = 两者按 [normalizeKey] 合并去重；基础集更新**不会**丢掉已收集的内容。
  *
@@ -86,6 +89,8 @@ class QuoteRepository(private val appContext: Context) {
     private var baseUpdatedAt = 0L
     private var baseLastAttemptAt = 0L
     private var lastCollectedAt = 0L
+    /** 已完成自动收集的那一周（存该周周一的 ISO 日期），用于「每周只收集一次」。 */
+    private var lastCollectWeek: String? = null
 
     // ---------------- 对外接口 ----------------
 
@@ -97,6 +102,7 @@ class QuoteRepository(private val appContext: Context) {
         }.onSuccess { cached ->
             // 先记收集节奏：即使基础集无效也要保留节流时间，避免重复硬撞接口。
             lastCollectedAt = cached?.lastCollectedAt ?: 0L
+            lastCollectWeek = cached?.lastCollectWeek
             collectedQuotes = clean(cached?.collected, NEW_QUOTE_MAX_LENGTH).take(MAX_COLLECTED)
             // 兼容 v1.4.x 旧格式（当时只有一份集合，字段名 quotes）。
             val base = clean(cached?.base ?: cached?.quotes, BASE_TEXT_MAX_LENGTH)
@@ -159,40 +165,71 @@ class QuoteRepository(private val appContext: Context) {
     }
 
     /**
-     * **静默收集新语录**：联网随机取句，去重后追加到本地语录集。
+     * **静默收集新语录**（每周一次）：仅当「今天是周一」且「本周尚未收集过」时才联网，
+     * 每轮随机新增 [COLLECT_MIN_PER_ROUND]~[COLLECT_MAX_PER_ROUND] 条（去重后追加）。
      *
-     * 触发时机：每次 App 进入前台（`MainActivity.onStart`）调用，内部按 [COLLECT_MIN_INTERVAL_MS]
-     * 节流；用户无需任何操作，也没有任何界面反馈。
+     * 触发时机：App 每次进入前台（`MainActivity.onStart`）调用，但内部只在周一首次打开时真正执行，
+     * 其余时间立即返回 —— 避免每次打开都请求接口。用户无需任何操作，也没有任何界面反馈。
      *
-     * @return 本次新增条数；0 表示被节流 / 全是重复 / 网络失败。
+     * 若周一当天联网全部失败（一条都没取到），**不标记本周已完成**，当天再次打开会重试；
+     * 接口正常但内容全是重复（无可新增），则标记本周已完成，不再重复请求。
+     *
+     * @return 本次新增条数；0 表示未到触发条件 / 全是重复 / 网络失败。
      */
-    suspend fun collectNewQuotes(): Int = mutex.withLock {
+    suspend fun collectNewQuotesIfDue(): Int = mutex.withLock {
+        val today = LocalDate.now()
+        val thisWeek = weekKey(today).toString()
         val now = System.currentTimeMillis()
-        if (now - lastCollectedAt < COLLECT_MIN_INTERVAL_MS) return@withLock 0
 
-        val added = withContext(Dispatchers.IO) {
+        // 触发条件：周一 + 本周未收集 + 距上次尝试超过最小间隔（防时钟/时区漂移导致重复触发）。
+        if (today.dayOfWeek != DayOfWeek.MONDAY) return@withLock 0
+        if (lastCollectWeek == thisWeek) return@withLock 0
+        // 仅在「有过上一次尝试」时才受间隔约束（首次运行为 0，不应被拦）。
+        if (lastCollectedAt > 0L && now - lastCollectedAt < MIN_COLLECT_GAP_MS) return@withLock 0
+
+        // 本轮目标条数：5~10 条之间随机（每次略有不同）。
+        val target = Random.nextInt(COLLECT_MIN_PER_ROUND, COLLECT_MAX_PER_ROUND + 1)
+        val result = withContext(Dispatchers.IO) {
             // 去重集合 = 当前生效集合 + 本批已取（seen.add 同时承担批内去重）。
             val seen = merge().mapTo(mutableSetOf()) { normalizeKey(it.text) }
             val picked = mutableListOf<Quote>()
-            repeat(COLLECT_PER_ROUND) { index ->
-                if (index > 0) delay(COLLECT_REQUEST_SPACING_MS)
-                val candidate = runCatching { fetchOneQuote() }.getOrNull() ?: return@repeat
+            var responded = false
+            var attempts = 0
+            // 目标条数可能因重复/超长被跳过，故允许 attempts 超出 target（上限 target*2）。
+            while (picked.size < target && attempts < target * MAX_ATTEMPT_FACTOR) {
+                if (attempts > 0) delay(COLLECT_REQUEST_SPACING_MS)
+                attempts++
+                val candidate = runCatching { fetchOneQuote() }.getOrNull()
+                if (candidate == null) {
+                    // 连续两次都拿不到响应 → 判定为网络不可用，立即收工，
+                    // 避免离线时白等 target*2 次超时（每次 8s）。
+                    if (!responded && attempts >= OFFLINE_ABORT_ATTEMPTS) break
+                    continue
+                }
+                responded = true
                 val text = candidate.text
-                if (text.length > NEW_QUOTE_MAX_LENGTH) return@repeat
-                if (!seen.add(normalizeKey(text))) return@repeat
+                if (text.length > NEW_QUOTE_MAX_LENGTH) continue
+                if (!seen.add(normalizeKey(text))) continue
                 picked += candidate
             }
-            picked
+            picked to responded
         }
+        val added = result.first
+        val anyResponse = result.second
 
-        // 无论有没有新内容都推进节流时间：失败/全重复时不要每次打开都硬撞接口。
         lastCollectedAt = System.currentTimeMillis()
-        if (added.isEmpty()) return@withLock 0
+        // 接口有响应（哪怕全是重复）就算本周完成；完全没响应该重试。
+        if (anyResponse) lastCollectWeek = thisWeek
 
-        collectedQuotes = (collectedQuotes + added).takeLast(MAX_COLLECTED)
+        if (added.isNotEmpty()) {
+            collectedQuotes = (collectedQuotes + added).takeLast(MAX_COLLECTED)
+        }
         persist()
-        publish(_state.value.source)
-        AppLogger.i(TAG, "静默收集语录 ${added.size} 条，当前共计 ${_state.value.quotes.size} 条")
+        if (added.isNotEmpty()) publish(_state.value.source)
+        AppLogger.i(
+            TAG,
+            "周更语录：目标 $target 条，接口有响应=$anyResponse，新增 ${added.size} 条，当前共计 ${_state.value.quotes.size} 条"
+        )
         added.size
     }
 
@@ -200,6 +237,10 @@ class QuoteRepository(private val appContext: Context) {
     fun daily(today: LocalDate = LocalDate.now()): Quote = _state.value.daily(today)
 
     // ---------------- 内部实现 ----------------
+
+    /** 某天所在周的周一（ISO：周一为一周第一天），作为「本周」的唯一标识。 */
+    private fun weekKey(today: LocalDate): LocalDate =
+        today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 
     /** 基础集是否到了该更新的时间点（从未成功则按失败重试间隔节流）。 */
     private fun isBaseDue(): Boolean {
@@ -303,6 +344,7 @@ class QuoteRepository(private val appContext: Context) {
                     CacheDto(
                         fetchedAt = baseUpdatedAt,
                         lastCollectedAt = lastCollectedAt,
+                        lastCollectWeek = lastCollectWeek,
                         base = baseQuotes.map { RawQuote(text = it.text, author = it.author) },
                         collected = collectedQuotes.map { RawQuote(text = it.text, author = it.author) }
                     )
@@ -327,6 +369,7 @@ class QuoteRepository(private val appContext: Context) {
     private data class CacheDto(
         val fetchedAt: Long? = null,
         val lastCollectedAt: Long? = null,
+        val lastCollectWeek: String? = null,
         val base: List<RawQuote>? = null,
         /** v1.4.x 旧格式字段（当时只有一份集合）。 */
         val quotes: List<RawQuote>? = null,
@@ -357,11 +400,16 @@ class QuoteRepository(private val appContext: Context) {
         private const val ATTEMPTS_PER_SOURCE = 2
         private const val RETRY_DELAY_MS = 600L
 
-        /** 每轮静默收集的目标条数与请求间隔（礼貌限速）。 */
-        private const val COLLECT_PER_ROUND = 5
-        private const val COLLECT_REQUEST_SPACING_MS = 350L
-        /** 收集节流：短时间内反复开关 App 不重复请求（正常「每次打开」仍会收集）。 */
-        private const val COLLECT_MIN_INTERVAL_MS = 30L * 60 * 1000
+        /** 每轮静默收集的目标条数区间（每次随机 5~10 条）与请求间隔（礼貌限速）。 */
+        private const val COLLECT_MIN_PER_ROUND = 5
+        private const val COLLECT_MAX_PER_ROUND = 10
+        private const val COLLECT_REQUEST_SPACING_MS = 600L
+        /** 为凑够目标条数，允许的最大请求次数倍数（重复/超长会被跳过）。 */
+        private const val MAX_ATTEMPT_FACTOR = 2
+        /** 两次收集之间的最小间隔（3 小时）：同一周内不会重复请求，同时给周一失败留出重试窗口。 */
+        private const val MIN_COLLECT_GAP_MS = 3L * 60 * 60 * 1000
+        /** 连续这么多次拿不到响应就判定离线并放弃本轮（避免离线空转超时）。 */
+        private const val OFFLINE_ABORT_ATTEMPTS = 2
         /** 收集集上限与单条长度上限（过长的句子卡片放不下）。 */
         private const val MAX_COLLECTED = 400
         private const val NEW_QUOTE_MAX_LENGTH = 60
