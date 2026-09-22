@@ -5,8 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.feiqi.data.model.ExportData
 import com.feiqi.data.repository.AccountRepository
 import com.feiqi.data.repository.PreferencesRepository
-import com.feiqi.data.repository.QuoteRepository
-import com.feiqi.data.repository.QuoteState
 import com.feiqi.utils.AppConfig
 import com.feiqi.utils.BackupManager
 import com.feiqi.utils.NotificationUtils
@@ -30,22 +28,8 @@ data class SettingsUiState(
 class SettingsViewModel(
     private val accountRepository: AccountRepository,
     private val preferencesRepository: PreferencesRepository,
-    private val backupManager: BackupManager,
-    private val quoteRepository: QuoteRepository
+    private val backupManager: BackupManager
 ) : ViewModel() {
-
-    /** 语录集状态：来源（内置/缓存/远程）、条数、最近更新时间、错误信息。 */
-    val quoteState: StateFlow<QuoteState> = quoteRepository.state
-
-    /** 手动更新语录集（强制联网，不受 7 天周期限制）。 */
-    fun refreshQuotes() {
-        viewModelScope.launch {
-            val result = quoteRepository.refresh(force = true)
-            _events.emit(
-                if (result.success) result.message else "语录更新失败：${result.message}"
-            )
-        }
-    }
 
     private val _events = MutableSharedFlow<String>()
     val events = _events.asSharedFlow()

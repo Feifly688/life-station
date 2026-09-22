@@ -39,14 +39,15 @@ class FeiQiApplication : Application() {
     }
 
     /**
-     * 语录集：先载入本地缓存保证首页立刻有内容，再按更新周期（默认 7 天）静默联网更新。
-     * 全程在 IO 线程、失败不打扰用户（保持缓存/内置语录），仅记录到日志与设置页状态。
+     * 语录集：先载入本地缓存保证首页立刻有内容，再静默更新「基础集」（7 天周期）。
+     * 自动收集新语录放在 `MainActivity.onStart`（每次打开 App 都跑一次，内部有节流）。
+     * 全程在 IO 线程、失败不打扰用户，仅记录到日志。
      */
     private fun syncQuotes() {
         appScope.launch {
             runCatching {
                 container.quoteRepository.loadCache()
-                container.quoteRepository.refresh(force = false)
+                container.quoteRepository.refreshBase(force = false)
             }.onFailure { AppLogger.e("QuoteSync", "语录集同步失败", it) }
         }
     }

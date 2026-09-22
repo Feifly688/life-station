@@ -1,11 +1,12 @@
 package com.feiqi.data.repository
 
 import android.content.Context
+import android.os.NetworkOnMainThreadException
 import com.feiqi.data.model.Quote
 import com.feiqi.utils.AppLogger
 import com.feiqi.utils.Quotes
 import com.google.gson.Gson
-import android.os.NetworkOnMainThreadException
+import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,58 +25,50 @@ import java.net.UnknownHostException
 import java.time.LocalDate
 import javax.net.ssl.SSLException
 
-/** 当前语录集的来源。 */
+/** 生效语录集的来源（内置兜底 / 本地缓存 / 远程基础集）。 */
 enum class QuoteSource { BUILT_IN, CACHE, REMOTE }
 
-/** 语录集状态（供 UI 展示与取当天语录）。 */
+/**
+ * 语录集状态。
+ *
+ * [quotes] = 基础集 + 自动收集集（已按归一化文本去重）；[baseCount]/[collectedCount] 供日志与排查。
+ */
 data class QuoteState(
     val quotes: List<Quote> = Quotes.builtIn,
-    val source: QuoteSource = QuoteSource.BUILT_IN,
-    /** 最近一次**联网成功**更新的时间戳；0 表示从未成功更新过。 */
-    val updatedAt: Long = 0L,
-    val lastError: String? = null,
-    val refreshing: Boolean = false
+    val baseCount: Int = Quotes.builtIn.size,
+    val collectedCount: Int = 0,
+    val source: QuoteSource = QuoteSource.BUILT_IN
 ) {
-    /** 取当天语录：同一天稳定同一条，跨零点自然切换（与改造前规则一致）。 */
+    /** 取当天语录：同一天稳定同一条，跨零点自然切换。 */
     fun daily(today: LocalDate): Quote {
         if (quotes.isEmpty()) return Quote("今天，慢慢来。")
         return quotes[today.toEpochDay().mod(quotes.size.toLong()).toInt()]
     }
 }
 
-/** 一次刷新的结果，供 UI 提示。 */
-data class QuoteRefreshResult(
-    val success: Boolean,
-    val message: String,
-    /** 是否真的从网络取到了新数据（未到更新周期时为 false）。 */
-    val updated: Boolean = false
-)
-
 /**
- * 语录集仓库：**远程更新 + 本地缓存 + 内置兜底**。
+ * 语录集仓库：**基础集（可远程更新）+ 自动收集（静默联网搜索）+ 本地缓存 + 内置兜底**。
+ *
+ * ## 两份集合
+ * | 集合 | 来源 | 更新方式 |
+ * | --- | --- | --- |
+ * | 基础集 | 内置 [Quotes.builtIn] 或仓库根目录 `quotes.json` | 距上次成功 ≥ [BASE_REFRESH_INTERVAL_MS]（7 天）时静默更新 |
+ * | 自动收集集 | 一言接口「文学 + 诗词」类别随机取句 | **每次 App 进入前台**静默收集，去重后追加（[collectNewQuotes]） |
+ *
+ * 生效集合 = 两者按 [normalizeKey] 合并去重；基础集更新**不会**丢掉已收集的内容。
+ *
+ * ## 去重
+ * [normalizeKey] 只保留字母/数字/汉字（丢掉空白与全部标点），因此
+ * 「慢慢来，比较快。」「慢慢来比较快」「慢慢来, 比较快。」会被视为同一条；
+ * 既与现有集合比对，也在同一批内部互相比对。
+ *
+ * ## 静默与降级
+ * 网络/文件 IO 全在 [Dispatchers.IO]；任何失败只写日志（无弹窗、无状态提示），
+ * 现有语录照常展示。基础集失败后 [FAIL_RETRY_INTERVAL_MS] 内不再重试。
  *
  * ## 数据源
- * 远端是仓库根目录的 `quotes.json`（`main` 分支），结构：
- * ```json
- * {
- *   "version": 1,
- *   "updatedAt": "2026-09-21",
- *   "quotes": [
- *     { "text": "慢慢来，比较快。" },
- *     { "text": "行百里者半九十。", "author": "《战国策》" }
- *   ]
- * }
- * ```
- * 依次尝试 [SOURCE_URLS]（GitHub raw → jsDelivr 镜像），任一成功即结束。
- *
- * ## 降级顺序
- * 远程成功 → 写入缓存（`filesDir/quotes_cache.json`，先写临时文件再改名，避免半截文件）；
- * 远程失败 → 继续用上次缓存；缓存也没有或损坏 → 用 [Quotes.builtIn]。
- * **任何失败都不会影响展示**，只记录 [QuoteState.lastError]。
- *
- * ## 更新时机
- * 由调用方决定：App 启动时 `refresh(force = false)`（距上次成功 ≥ [REFRESH_INTERVAL_MS] 才真正联网），
- * 设置页手动触发用 `refresh(force = true)`。
+ * - 基础集：`quotes.json`（GitHub raw → jsDelivr 镜像）
+ * - 自动收集：`https://v1.hitokoto.cn/?c=d,i`（文学 / 诗词）
  */
 class QuoteRepository(private val appContext: Context) {
 
@@ -86,136 +79,189 @@ class QuoteRepository(private val appContext: Context) {
     private val _state = MutableStateFlow(QuoteState())
     val state: StateFlow<QuoteState> = _state.asStateFlow()
 
-    /** 上次发起联网更新的时间（进程内），用于失败后的快速重试节流。 */
-    private var lastAttemptAt = 0L
+    /** 基础集（内置或远程）。 */
+    private var baseQuotes: List<Quote> = Quotes.builtIn
+    /** 自动收集集（网络搜索去重后追加，长期累积）。 */
+    private var collectedQuotes: List<Quote> = emptyList()
+    private var baseUpdatedAt = 0L
+    private var baseLastAttemptAt = 0L
+    private var lastCollectedAt = 0L
 
-    /**
-     * 启动时载入本地缓存。缓存不存在/损坏/条数过少时**保持内置语录**，不抛异常。
-     */
+    // ---------------- 对外接口 ----------------
+
+    /** 启动时载入本地缓存（基础集 + 已收集集）。不存在/损坏时保持内置语录。 */
     suspend fun loadCache() = withContext(Dispatchers.IO) {
         if (!cacheFile.exists()) return@withContext
         runCatching {
             gson.fromJson(cacheFile.readText(Charsets.UTF_8), CacheDto::class.java)
         }.onSuccess { cached ->
-            val quotes = sanitize(cached?.quotes)
-            if (quotes.size >= MIN_QUOTES) {
-                _state.value = _state.value.copy(
-                    quotes = quotes,
-                    source = QuoteSource.CACHE,
-                    updatedAt = cached?.fetchedAt ?: 0L
-                )
-                AppLogger.i(TAG, "语录缓存载入成功：${quotes.size} 条")
+            // 先记收集节奏：即使基础集无效也要保留节流时间，避免重复硬撞接口。
+            lastCollectedAt = cached?.lastCollectedAt ?: 0L
+            collectedQuotes = clean(cached?.collected, NEW_QUOTE_MAX_LENGTH).take(MAX_COLLECTED)
+            // 兼容 v1.4.x 旧格式（当时只有一份集合，字段名 quotes）。
+            val base = clean(cached?.base ?: cached?.quotes, BASE_TEXT_MAX_LENGTH)
+            val source = if (base.size >= MIN_BASE_QUOTES) {
+                baseQuotes = base
+                baseUpdatedAt = cached?.fetchedAt ?: 0L
+                QuoteSource.CACHE
+            } else {
+                QuoteSource.BUILT_IN
             }
+            publish(source)
+            AppLogger.i(TAG, "语录缓存载入：基础集 ${baseQuotes.size} 条 + 收集 ${collectedQuotes.size} 条")
         }.onFailure {
             AppLogger.e(TAG, "语录缓存解析失败，改用内置语录", it)
         }
     }
 
     /**
-     * 联网更新语录集。
+     * 静默更新**基础集**（远程 `quotes.json`）。
      *
-     * **线程契约**：网络与文件 IO 全部在 [Dispatchers.IO] 内完成，本方法可以安全地从任何
-     * 上下文调用（主线程也可以）——不要把线程切换的责任推给调用方：
-     * `viewModelScope` 是 `Dispatchers.Main`，一旦漏了 `withContext` 就会抛
-     * `NetworkOnMainThreadException`（v1.4.0 的实际缺陷）。
-     *
-     * **重试策略**：每个源最多尝试 [ATTEMPTS_PER_SOURCE] 次（间隔 [RETRY_DELAY_MS] 毫秒），
-     * 再换下一个源；全部失败时记录 [QuoteState.lastError]，并让下次自动更新提前到
-     * [FAIL_RETRY_INTERVAL_MS] 之后（而不是傻等 7 天）。
-     *
-     * @param force 为 false 时，仅当「该更新了」才真正发起请求（见 [isDue]）。
+     * 网络与文件 IO 全部在 [Dispatchers.IO]，可安全地从任何上下文调用（含主线程）。
+     * @param force 为 false 时，仅当「该更新了」才真正发起请求（见 [isBaseDue]）。
+     * @return 是否成功取到并应用了新基础集。
      */
-    suspend fun refresh(force: Boolean): QuoteRefreshResult = mutex.withLock {
-        val current = _state.value
-        if (current.refreshing) {
-            return@withLock QuoteRefreshResult(false, "正在更新中，请稍候")
-        }
-        if (!force && !isDue(current)) {
-            return@withLock QuoteRefreshResult(true, "语录已是最新（${current.quotes.size} 条）")
+    suspend fun refreshBase(force: Boolean): Boolean = mutex.withLock {
+        if (!force && !isBaseDue()) return@withLock false
+        baseLastAttemptAt = System.currentTimeMillis()
+
+        val outcome = withContext(Dispatchers.IO) {
+            var failure: String? = null
+            for (url in BASE_SOURCE_URLS) {
+                for (attempt in 1..ATTEMPTS_PER_SOURCE) {
+                    val result = runCatching { fetchBase(url) }
+                    val quotes = result.getOrNull()
+                    if (quotes != null) return@withContext FetchOutcome.Success(quotes)
+                    failure = describe(result.exceptionOrNull())
+                    if (attempt < ATTEMPTS_PER_SOURCE) delay(RETRY_DELAY_MS)
+                }
+                AppLogger.e(TAG, "基础集源不可用（$url）：$failure")
+            }
+            FetchOutcome.Failure(failure ?: "网络不可用")
         }
 
-        _state.value = current.copy(refreshing = true)
-        lastAttemptAt = System.currentTimeMillis()
-        try {
-            // 关键：所有阻塞式网络/文件操作都切到 IO 线程。
-            val outcome = withContext(Dispatchers.IO) {
-                var failure: String? = null
-                for (url in SOURCE_URLS) {
-                    for (attempt in 1..ATTEMPTS_PER_SOURCE) {
-                        val result = runCatching { fetchAndParse(url) }
-                        val quotes = result.getOrNull()
-                        if (quotes != null) return@withContext FetchOutcome.Success(quotes)
-                        failure = describe(result.exceptionOrNull())
-                        if (attempt < ATTEMPTS_PER_SOURCE) delay(RETRY_DELAY_MS)
-                    }
-                    AppLogger.e(TAG, "语录源不可用（$url）：$failure")
-                }
-                FetchOutcome.Failure(failure ?: "网络不可用")
+        return@withLock when (outcome) {
+            is FetchOutcome.Success -> {
+                baseQuotes = outcome.quotes
+                baseUpdatedAt = System.currentTimeMillis()
+                persist()
+                publish(QuoteSource.REMOTE)
+                AppLogger.i(TAG, "基础集更新成功：${outcome.quotes.size} 条")
+                true
             }
 
-            return@withLock when (outcome) {
-                is FetchOutcome.Success -> {
-                    persist(outcome.quotes)
-                    _state.value = QuoteState(
-                        quotes = outcome.quotes,
-                        source = QuoteSource.REMOTE,
-                        updatedAt = System.currentTimeMillis(),
-                        lastError = null,
-                        refreshing = false
-                    )
-                    AppLogger.i(TAG, "语录集更新成功：${outcome.quotes.size} 条")
-                    QuoteRefreshResult(true, "已更新 ${outcome.quotes.size} 条语录", updated = true)
-                }
-
-                is FetchOutcome.Failure -> {
-                    // 失败：保留现有语录（缓存或内置），只记录原因，供设置页展示与手动重试。
-                    _state.value = _state.value.copy(refreshing = false, lastError = outcome.message)
-                    AppLogger.e(TAG, "语录集更新失败：${outcome.message}")
-                    QuoteRefreshResult(false, outcome.message)
-                }
-            }
-        } finally {
-            if (_state.value.refreshing) {
-                _state.value = _state.value.copy(refreshing = false)
+            is FetchOutcome.Failure -> {
+                // 失败：保留现有基础集与全部已收集语录，只记日志。
+                AppLogger.e(TAG, "基础集更新失败：${outcome.message}")
+                false
             }
         }
+    }
+
+    /**
+     * **静默收集新语录**：联网随机取句，去重后追加到本地语录集。
+     *
+     * 触发时机：每次 App 进入前台（`MainActivity.onStart`）调用，内部按 [COLLECT_MIN_INTERVAL_MS]
+     * 节流；用户无需任何操作，也没有任何界面反馈。
+     *
+     * @return 本次新增条数；0 表示被节流 / 全是重复 / 网络失败。
+     */
+    suspend fun collectNewQuotes(): Int = mutex.withLock {
+        val now = System.currentTimeMillis()
+        if (now - lastCollectedAt < COLLECT_MIN_INTERVAL_MS) return@withLock 0
+
+        val added = withContext(Dispatchers.IO) {
+            // 去重集合 = 当前生效集合 + 本批已取（seen.add 同时承担批内去重）。
+            val seen = merge().mapTo(mutableSetOf()) { normalizeKey(it.text) }
+            val picked = mutableListOf<Quote>()
+            repeat(COLLECT_PER_ROUND) { index ->
+                if (index > 0) delay(COLLECT_REQUEST_SPACING_MS)
+                val candidate = runCatching { fetchOneQuote() }.getOrNull() ?: return@repeat
+                val text = candidate.text
+                if (text.length > NEW_QUOTE_MAX_LENGTH) return@repeat
+                if (!seen.add(normalizeKey(text))) return@repeat
+                picked += candidate
+            }
+            picked
+        }
+
+        // 无论有没有新内容都推进节流时间：失败/全重复时不要每次打开都硬撞接口。
+        lastCollectedAt = System.currentTimeMillis()
+        if (added.isEmpty()) return@withLock 0
+
+        collectedQuotes = (collectedQuotes + added).takeLast(MAX_COLLECTED)
+        persist()
+        publish(_state.value.source)
+        AppLogger.i(TAG, "静默收集语录 ${added.size} 条，当前共计 ${_state.value.quotes.size} 条")
+        added.size
     }
 
     /** 当天语录（按当前生效的语录集取模）。 */
     fun daily(today: LocalDate = LocalDate.now()): Quote = _state.value.daily(today)
 
-    /**
-     * 是否到了该联网更新的时间点。
-     * - 从未成功过 → 距上次**尝试**（含失败）超过 [FAIL_RETRY_INTERVAL_MS] 才再试，避免每次启动都硬撞；
-     * - 成功过 → 距上次成功超过 [REFRESH_INTERVAL_MS]（7 天）。
-     */
-    fun isDue(state: QuoteState = _state.value): Boolean {
-        val now = System.currentTimeMillis()
-        if (state.updatedAt <= 0L) {
-            return now - lastAttemptAt >= FAIL_RETRY_INTERVAL_MS
-        }
-        return now - state.updatedAt >= REFRESH_INTERVAL_MS
-    }
-
-    /** 本次刷新尝试的结果（域内类型，避免用异常表达失败）。 */
-    private sealed interface FetchOutcome {
-        data class Success(val quotes: List<Quote>) : FetchOutcome
-        data class Failure(val message: String) : FetchOutcome
-    }
-
     // ---------------- 内部实现 ----------------
 
-    /** 取回并解析一个源；解析后条数不足视为失败（避免半截/错误内容覆盖好数据）。 */
-    private fun fetchAndParse(url: String): List<Quote> {
+    /** 基础集是否到了该更新的时间点（从未成功则按失败重试间隔节流）。 */
+    private fun isBaseDue(): Boolean {
+        val now = System.currentTimeMillis()
+        if (baseUpdatedAt <= 0L) return now - baseLastAttemptAt >= FAIL_RETRY_INTERVAL_MS
+        return now - baseUpdatedAt >= BASE_REFRESH_INTERVAL_MS
+    }
+
+    /** 生效集合 = 基础集 + 收集集，按归一化文本去重（基础集优先保留）。 */
+    private fun merge(): List<Quote> = (baseQuotes + collectedQuotes).distinctBy { normalizeKey(it.text) }
+
+    private fun publish(source: QuoteSource) {
+        _state.value = QuoteState(
+            quotes = merge(),
+            baseCount = baseQuotes.size,
+            collectedCount = collectedQuotes.size,
+            source = source
+        )
+    }
+
+    /** 去重用的归一化键：只保留字母 / 数字 / 汉字，丢掉空白与标点。 */
+    private fun normalizeKey(text: String): String = text.filter { it.isLetterOrDigit() }
+
+    /** 清洗：压平换行、去空白、丢弃空/超长条目、按文本去重。 */
+    private fun clean(raw: List<RawQuote>?, maxLength: Int): List<Quote> {
+        return raw.orEmpty().asSequence()
+            .mapNotNull { item ->
+                val text = item.text?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+                if (text.isEmpty() || text.length > maxLength) {
+                    null
+                } else {
+                    Quote(text = text, author = item.author?.trim()?.ifBlank { null })
+                }
+            }
+            .distinctBy { normalizeKey(it.text) }
+            .toList()
+    }
+
+    /** 取远程基础集（条数不足视为无效，避免坏数据顶掉好数据）。 */
+    private fun fetchBase(url: String): List<Quote> {
         val body = httpGet(url)
-        val dto = runCatching { gson.fromJson(body, RemoteDto::class.java) }
+        val dto = runCatching { gson.fromJson(body, BaseSetDto::class.java) }
             .getOrElse { throw IOException("响应不是合法 JSON") }
             ?: throw IOException("响应为空")
-        val quotes = sanitize(dto.quotes)
-        if (quotes.size < MIN_QUOTES) {
-            throw IOException("语录条数过少（${quotes.size} < $MIN_QUOTES）")
+        val quotes = clean(dto.quotes, BASE_TEXT_MAX_LENGTH)
+        if (quotes.size < MIN_BASE_QUOTES) {
+            throw IOException("语录条数过少（${quotes.size} < $MIN_BASE_QUOTES）")
         }
         return quotes
+    }
+
+    /** 取一条网络语录（一言接口：文学 + 诗词）。 */
+    private fun fetchOneQuote(): Quote {
+        // 带时间戳参数：接口/CDN 对同一 URL 有短时缓存，否则连续请求会反复拿到同一句。
+        val body = httpGet(HITOKOTO_URL + System.currentTimeMillis())
+        val dto = runCatching { gson.fromJson(body, HitokotoDto::class.java) }
+            .getOrElse { throw IOException("响应不是合法 JSON") }
+            ?: throw IOException("响应为空")
+        val text = dto.text?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+        if (text.isEmpty()) throw IOException("响应缺少语录内容")
+        val author = dto.fromWho?.trim()?.ifBlank { null } ?: dto.from?.trim()?.ifBlank { null }
+        return Quote(text = text, author = author)
     }
 
     private fun httpGet(url: String): String {
@@ -238,29 +284,29 @@ class QuoteRepository(private val appContext: Context) {
         }
     }
 
-    /** 清洗：去空白、丢弃空/超长条目、按文本去重、限制总量。 */
-    private fun sanitize(raw: List<RawQuote>?): List<Quote> {
-        return raw.orEmpty().asSequence()
-            .mapNotNull { item ->
-                val text = item.text?.trim().orEmpty()
-                if (text.isEmpty() || text.length > MAX_TEXT_LENGTH) {
-                    null
-                } else {
-                    Quote(text = text, author = item.author?.trim()?.ifBlank { null })
-                }
-            }
-            .distinctBy { it.text }
-            .take(MAX_QUOTES)
-            .toList()
+    /** 把异常翻译成可读原因（只进日志）。 */
+    private fun describe(t: Throwable?): String = when (t) {
+        null -> "未知错误"
+        is UnknownHostException -> "网络不可用"
+        is SocketTimeoutException -> "连接超时"
+        is ConnectException -> "无法连接到服务器"
+        is SSLException -> "安全连接建立失败"
+        is NetworkOnMainThreadException -> "网络请求误在主线程执行（内部错误）"
+        else -> t.message?.takeIf { it.isNotBlank() } ?: t::class.simpleName ?: "未知错误"
     }
 
-    private fun persist(quotes: List<Quote>) {
+    private fun persist() {
         runCatching {
             val tmp = File(cacheFile.parentFile, "$CACHE_FILE_NAME.tmp")
             tmp.writeText(
-                gson.toJson(CacheDto(fetchedAt = System.currentTimeMillis(), quotes = quotes.map {
-                    RawQuote(text = it.text, author = it.author)
-                })),
+                gson.toJson(
+                    CacheDto(
+                        fetchedAt = baseUpdatedAt,
+                        lastCollectedAt = lastCollectedAt,
+                        base = baseQuotes.map { RawQuote(text = it.text, author = it.author) },
+                        collected = collectedQuotes.map { RawQuote(text = it.text, author = it.author) }
+                    )
+                ),
                 Charsets.UTF_8
             )
             // 先写临时文件再改名：避免写一半被中断留下半截 JSON。
@@ -271,50 +317,76 @@ class QuoteRepository(private val appContext: Context) {
         }.onFailure { AppLogger.e(TAG, "语录缓存写入失败", it) }
     }
 
-    /** 把异常翻译成用户能看懂的中文提示（设置页会直接展示）。 */
-    private fun describe(t: Throwable?): String = when (t) {
-        null -> "未知错误"
-        is UnknownHostException -> "网络不可用，请检查网络连接后重试"
-        is SocketTimeoutException -> "连接超时，请稍后重试"
-        is ConnectException -> "无法连接到服务器，请稍后重试"
-        is SSLException -> "安全连接建立失败，请稍后重试"
-        is NetworkOnMainThreadException -> "网络请求误在主线程执行（内部错误）"
-        else -> t.message?.takeIf { it.isNotBlank() } ?: t::class.simpleName ?: "未知错误"
+    /** 本次基础集拉取的结果。 */
+    private sealed interface FetchOutcome {
+        data class Success(val quotes: List<Quote>) : FetchOutcome
+        data class Failure(val message: String) : FetchOutcome
     }
 
-    /** 远端 `quotes.json` 的解析模型（字段全部可空，容忍不完整/脏数据）。 */
-    private data class RemoteDto(val version: Int? = null, val quotes: List<RawQuote>? = null)
+    /** 本地缓存解析模型（字段全部可空，容忍脏数据与旧格式）。 */
+    private data class CacheDto(
+        val fetchedAt: Long? = null,
+        val lastCollectedAt: Long? = null,
+        val base: List<RawQuote>? = null,
+        /** v1.4.x 旧格式字段（当时只有一份集合）。 */
+        val quotes: List<RawQuote>? = null,
+        val collected: List<RawQuote>? = null
+    )
 
-    /** 本地缓存的解析模型。 */
-    private data class CacheDto(val fetchedAt: Long? = null, val quotes: List<RawQuote>? = null)
+    /** 远程 quotes.json 解析模型。 */
+    private data class BaseSetDto(val version: Int? = null, val quotes: List<RawQuote>? = null)
+
+    /** 一言接口解析模型。 */
+    private data class HitokotoDto(
+        @SerializedName("hitokoto") val text: String? = null,
+        @SerializedName("from") val from: String? = null,
+        @SerializedName("from_who") val fromWho: String? = null
+    )
 
     private data class RawQuote(val text: String? = null, val author: String? = null)
 
     companion object {
         private const val TAG = "QuoteRepository"
         private const val CACHE_FILE_NAME = "quotes_cache.json"
-        /** 更新周期：7 天。 */
-        private const val REFRESH_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
-        /** 上次失败后，多久才再自动重试一次（10 分钟）。 */
+
+        /** 基础集更新周期：7 天。 */
+        private const val BASE_REFRESH_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
+        /** 基础集失败后多久才再自动重试（10 分钟）。 */
         private const val FAIL_RETRY_INTERVAL_MS = 10L * 60 * 1000
         /** 单个源的最大尝试次数与重试间隔。 */
         private const val ATTEMPTS_PER_SOURCE = 2
         private const val RETRY_DELAY_MS = 600L
+
+        /** 每轮静默收集的目标条数与请求间隔（礼貌限速）。 */
+        private const val COLLECT_PER_ROUND = 5
+        private const val COLLECT_REQUEST_SPACING_MS = 350L
+        /** 收集节流：短时间内反复开关 App 不重复请求（正常「每次打开」仍会收集）。 */
+        private const val COLLECT_MIN_INTERVAL_MS = 30L * 60 * 1000
+        /** 收集集上限与单条长度上限（过长的句子卡片放不下）。 */
+        private const val MAX_COLLECTED = 400
+        private const val NEW_QUOTE_MAX_LENGTH = 60
+        private const val BASE_TEXT_MAX_LENGTH = 160
+        /** 基础集少于这个条数视为无效（防止坏数据顶掉好数据）。 */
+        private const val MIN_BASE_QUOTES = 10
+
         private const val CONNECT_TIMEOUT_MS = 8_000
         private const val READ_TIMEOUT_MS = 8_000
-        /** 少于这个条数就认为不是一份有效语录集（防止坏数据把好数据顶掉）。 */
-        private const val MIN_QUOTES = 10
-        private const val MAX_QUOTES = 2_000
-        private const val MAX_TEXT_LENGTH = 160
         private const val USER_AGENT = "FeiQi-Android"
 
-        /**
-         * 语录集地址，按顺序尝试。指向本仓库 `main` 分支根目录的 `quotes.json`，
-         * 改语录只需在 GitHub 上编辑该文件（手机端也能改），无需服务器。
-         */
-        private val SOURCE_URLS = listOf(
+        /** 基础集地址（人工维护的精选集），按顺序尝试。 */
+        private val BASE_SOURCE_URLS = listOf(
             "https://raw.githubusercontent.com/Feifly688/life-station/main/quotes.json",
             "https://cdn.jsdelivr.net/gh/Feifly688/life-station@main/quotes.json"
         )
+
+        /**
+         * 自动收集用的网络语录源（一言）。
+         *
+         * 注意：多分类必须写成**重复参数** `c=d&c=i`；写成逗号形式 `c=d,i` 接口会返回
+         * 400「没有分类有句子符合长度区间」（实测）。末尾 `_=` 拼时间戳用于绕过 CDN 缓存，
+         * 否则连续请求会反复拿到同一句。
+         */
+        private const val HITOKOTO_URL =
+            "https://v1.hitokoto.cn/?c=d&c=i&encode=json&charset=utf-8&_="
     }
 }

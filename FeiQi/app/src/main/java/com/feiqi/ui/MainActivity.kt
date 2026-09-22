@@ -16,11 +16,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.feiqi.AppContainer
 import com.feiqi.FeiQiApplication
+import kotlinx.coroutines.launch
 import com.feiqi.ui.accounting.AccountingScreen
 import com.feiqi.ui.accounting.AccountingViewModel
 import com.feiqi.ui.components.FeiQiBottomBar
@@ -37,6 +39,18 @@ import com.feiqi.ui.settings.SettingsViewModel
 import com.feiqi.ui.theme.FeiQiTheme
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * 每次 App 进入前台静默收集新语录（去重后追加到本地语录集）。
+     * 仓库内部自行切 IO、按 30 分钟节流、失败只写日志 —— 不打扰用户、无需任何手动操作。
+     */
+    override fun onStart() {
+        super.onStart()
+        val repository = (application as FeiQiApplication).container.quoteRepository
+        lifecycleScope.launch {
+            runCatching { repository.collectNewQuotes() }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,8 +134,7 @@ class MainActivity : ComponentActivity() {
                                 return SettingsViewModel(
                                     container.accountRepository,
                                     container.preferencesRepository,
-                                    container.backupManager,
-                                    container.quoteRepository
+                                    container.backupManager
                                 ) as T
                             }
                         }
