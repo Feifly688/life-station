@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
@@ -239,6 +240,8 @@ internal fun QuickAddPanel(
                         onFinishEdit = { focusActiveInput() },
                         focusRequester = itemFocusRequester,
                         cursorAtEnd = pendingCursorAtEnd[item.id] == true,
+                        // 同一帧就位光标用（读实时值）；上面的 cursorAtEnd 供兜底通道使用。
+                        cursorAtEndProvider = { pendingCursorAtEnd[item.id] == true },
                         onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
                     )
                 }
@@ -455,23 +458,27 @@ internal fun DraftItemRow(
     onFinishEdit: () -> Unit,
     focusRequester: FocusRequester,
     cursorAtEnd: Boolean,
+    /**
+     * **实时**读取「本条需要把光标放到末尾」的标记（读取时取当前值，不是组合期快照）。
+     *
+     * 为什么不能直接用上面的 [cursorAtEnd] 参数：焦点移交是**同步**的（为消除闪屏，见 focusDraft），
+     * `onFocusChanged` 会**早于重组**触发，那时参数里捕获的还是上一次组合的旧值 → 光标不会就位。
+     * 用这个 lambda 在回调里读快照 map，拿到的是调用瞬间的真实值。
+     */
+    cursorAtEndProvider: () -> Boolean,
     onCursorAtEndConsumed: () -> Unit
 ) {
     // 行内文本以本地 TextFieldValue 承载（需要光标位置），变更即时回传给上层草稿列表。
     var value by remember(item.id) { mutableStateOf(TextFieldValue(item.text)) }
 
-    // 收到「把光标放到行尾」的请求时执行。
-    //
-    // 为什么必须放在 LaunchedEffect 里、而不能写在 onFocusChanged 中判断 cursorAtEnd：
-    // 焦点移交是**同步**的（为消除闪屏，见 focusDraft），onFocusChanged 会在**重组之前**触发，
-    // 此时 modifier 里捕获的 cursorAtEnd 还是上一次组合的旧值（false）→ 光标不会被移到末尾、
-    // 标记也不会被消费（v1.4.1 的回归）。LaunchedEffect 在本次组合提交后运行，拿到的必然是新值，
-    // 因此顺序无关：无论先获焦还是先置标记，光标都会落到行尾，标记也会被及时消费。
+    fun placeCursorAtEnd() {
+        value = TextFieldValue(value.text, TextRange(value.text.length))
+        onCursorAtEndConsumed()
+    }
+
+    // 兜底通道：标记已到、但没有伴随焦点变化（例如该行本来就处于焦点）时，在这里补上。
     LaunchedEffect(cursorAtEnd) {
-        if (cursorAtEnd) {
-            value = TextFieldValue(value.text, TextRange(value.text.length))
-            onCursorAtEndConsumed()
-        }
+        if (cursorAtEnd) placeCursorAtEnd()
     }
 
     Row(
@@ -493,6 +500,11 @@ internal fun DraftItemRow(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
+                .onFocusChanged { state ->
+                    // 获焦的**同一帧**就把光标放到末尾：这样第一帧画出来就在行尾，
+                    // 不会出现「先显示在行首、下一帧再跳到行尾」的可见跳动。
+                    if (state.isFocused && cursorAtEndProvider()) placeCursorAtEnd()
+                }
                 .onKeyEvent { event ->
                     // 内容已清空后再退格一次即移除该行（输入法删除，无需确认）。
                     if (event.key == Key.Backspace && value.text.isEmpty()) {
