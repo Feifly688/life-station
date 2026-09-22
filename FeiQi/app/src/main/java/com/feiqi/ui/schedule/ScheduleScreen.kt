@@ -165,7 +165,10 @@ fun ScheduleScreen(
     var showReminderDialog by remember { mutableStateOf(false) }
     var reminderSetTip by remember { mutableStateOf<String?>(null) }
 
-    var expandedListIds by remember { mutableStateOf(setOf<String>()) }
+    // 记录**被用户主动收起**的清单 id —— 用「收起集合」而非「展开集合」，
+    // 这样初始空集合天然等于「全部展开」：进入待办页第一帧就是展开态，
+    // 不会出现「先渲染成收起、再播放展开动画」的肉眼可见过程。
+    var collapsedListIds by remember { mutableStateOf(setOf<String>()) }
     // 已完成列表默认展开（用户可点击标题折叠）。
     var completedExpanded by remember { mutableStateOf(true) }
     var editingGroup by remember { mutableStateOf<ScheduleListItem.Group?>(null) }
@@ -314,13 +317,13 @@ fun ScheduleScreen(
                     items(activeItems, key = { itemKey(it) }) { item ->
                         ScheduleListItemCard(
                             item = item,
-                            expanded = item is ScheduleListItem.Group && item.listId in expandedListIds,
+                            expanded = item is ScheduleListItem.Group && item.listId !in collapsedListIds,
                             selectionMode = selectionMode,
                             selected = isSelected(item),
                             isCompleted = false,
                             onToggleGroup = { listId ->
                                 if (!selectionMode) {
-                                    expandedListIds = expandedListIds.xor(listId)
+                                    collapsedListIds = collapsedListIds.xor(listId)
                                 }
                             },
                             onToggleItem = { schedule ->
@@ -366,13 +369,13 @@ fun ScheduleScreen(
                         items(completedItems, key = { "done-${itemKey(it)}" }) { item ->
                             ScheduleListItemCard(
                                 item = item,
-                                expanded = item is ScheduleListItem.Group && item.listId in expandedListIds,
+                                expanded = item is ScheduleListItem.Group && item.listId !in collapsedListIds,
                                 selectionMode = selectionMode,
                                 selected = isSelected(item),
                                 isCompleted = true,
                                 onToggleGroup = { listId ->
                                     if (!selectionMode) {
-                                        expandedListIds = expandedListIds.xor(listId)
+                                        collapsedListIds = collapsedListIds.xor(listId)
                                     }
                                 },
                                 onToggleItem = { schedule ->
