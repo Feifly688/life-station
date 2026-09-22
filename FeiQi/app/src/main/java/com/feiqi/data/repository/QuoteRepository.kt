@@ -56,7 +56,7 @@ data class QuoteState(
  * | 集合 | 来源 | 更新方式 |
  * | --- | --- | --- |
  * | 基础集 | 内置 [Quotes.builtIn] 或仓库根目录 `quotes.json` | 距上次成功 ≥ [BASE_REFRESH_INTERVAL_MS]（7 天）时静默更新 |
- * | 自动收集集 | 一言接口「文学 + 诗词」类别随机取句 | **每周一首次打开 App**静默收集 5~10 条，去重后追加（[collectNewQuotesIfDue]） |
+ * | 自动收集集 | 一言接口「文学 + 诗词」类别随机取句 | **每周首次打开 App**静默收集 5~10 条，去重后追加（[collectNewQuotesIfDue]） |
  *
  * 生效集合 = 两者按 [normalizeKey] 合并去重；基础集更新**不会**丢掉已收集的内容。
  *
@@ -165,24 +165,25 @@ class QuoteRepository(private val appContext: Context) {
     }
 
     /**
-     * **静默收集新语录**（每周一次）：仅当「今天是周一」且「本周尚未收集过」时才联网，
+     * **静默收集新语录**（每周一次）：本周**第一次**打开 App 时才联网 —— 不限定周几，
+     * 周一没打开就在本周首次打开时补做，本周做过一次之后不再触发。
      * 每轮随机新增 [COLLECT_MIN_PER_ROUND]~[COLLECT_MAX_PER_ROUND] 条（去重后追加）。
      *
-     * 触发时机：App 每次进入前台（`MainActivity.onStart`）调用，但内部只在周一首次打开时真正执行，
-     * 其余时间立即返回 —— 避免每次打开都请求接口。用户无需任何操作，也没有任何界面反馈。
+     * 触发时机：App 每次进入前台（`MainActivity.onStart`）调用，但内部只在「本周尚未收集」时
+     * 才真正执行，其余时间立即返回 —— 避免每次打开都请求接口。用户无需任何操作，也没有界面反馈。
      *
-     * 若周一当天联网全部失败（一条都没取到），**不标记本周已完成**，当天再次打开会重试；
-     * 接口正常但内容全是重复（无可新增），则标记本周已完成，不再重复请求。
+     * 若本次联网全部失败（一条都没取到），**不标记本周已完成**，稍后（≥ [MIN_COLLECT_GAP_MS]）
+     * 再打开会重试；接口正常但内容全是重复（无可新增），则标记本周已完成，不再重复请求。
      *
-     * @return 本次新增条数；0 表示未到触发条件 / 全是重复 / 网络失败。
+     * @return 本次新增条数；0 表示本周已完成 / 未到最小间隔 / 全是重复 / 网络失败。
      */
     suspend fun collectNewQuotesIfDue(): Int = mutex.withLock {
         val today = LocalDate.now()
         val thisWeek = weekKey(today).toString()
         val now = System.currentTimeMillis()
 
-        // 触发条件：周一 + 本周未收集 + 距上次尝试超过最小间隔（防时钟/时区漂移导致重复触发）。
-        if (today.dayOfWeek != DayOfWeek.MONDAY) return@withLock 0
+        // 触发条件：本周尚未收集 + 距上次尝试超过最小间隔（防时钟/时区漂移导致同周重复触发）。
+        // 「本周」以该周周一的日期标识，因此跨周自动重置、同一周内只触发一次（不限定周几）。
         if (lastCollectWeek == thisWeek) return@withLock 0
         // 仅在「有过上一次尝试」时才受间隔约束（首次运行为 0，不应被拦）。
         if (lastCollectedAt > 0L && now - lastCollectedAt < MIN_COLLECT_GAP_MS) return@withLock 0
@@ -228,7 +229,7 @@ class QuoteRepository(private val appContext: Context) {
         if (added.isNotEmpty()) publish(_state.value.source)
         AppLogger.i(
             TAG,
-            "周更语录：目标 $target 条，接口有响应=$anyResponse，新增 ${added.size} 条，当前共计 ${_state.value.quotes.size} 条"
+            "本周语录收集：目标 $target 条，接口有响应=$anyResponse，新增 ${added.size} 条，当前共计 ${_state.value.quotes.size} 条"
         )
         added.size
     }
@@ -238,7 +239,7 @@ class QuoteRepository(private val appContext: Context) {
 
     // ---------------- 内部实现 ----------------
 
-    /** 某天所在周的周一（ISO：周一为一周第一天），作为「本周」的唯一标识。 */
+    /** 某天所在周的周一（ISO：周一为一周第一天）—— 用它作为「本周」的唯一标识，与周几无关。 */
     private fun weekKey(today: LocalDate): LocalDate =
         today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 
@@ -406,7 +407,7 @@ class QuoteRepository(private val appContext: Context) {
         private const val COLLECT_REQUEST_SPACING_MS = 600L
         /** 为凑够目标条数，允许的最大请求次数倍数（重复/超长会被跳过）。 */
         private const val MAX_ATTEMPT_FACTOR = 2
-        /** 两次收集之间的最小间隔（3 小时）：同一周内不会重复请求，同时给周一失败留出重试窗口。 */
+        /** 两次收集之间的最小间隔（3 小时）：给「本周首次尝试失败」留出重试窗口，同时防止同周重复触发。 */
         private const val MIN_COLLECT_GAP_MS = 3L * 60 * 60 * 1000
         /** 连续这么多次拿不到响应就判定离线并放弃本轮（避免离线空转超时）。 */
         private const val OFFLINE_ABORT_ATTEMPTS = 2

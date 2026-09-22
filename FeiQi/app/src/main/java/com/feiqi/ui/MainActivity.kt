@@ -41,8 +41,8 @@ import com.feiqi.ui.theme.FeiQiTheme
 class MainActivity : ComponentActivity() {
 
     /**
-     * 语录集周更入口：**仅当今天是周一且本周还没更新过**时才真正联网（每次新增 5~10 条）。
-     * 其余时间调用会立即返回，因此这里挂在 onStart 上没有额外开销。
+     * 语录集周更入口：**本周第一次打开 App** 时真正联网（每次新增 5~10 条，不限定周几）。
+     * 本周已收集过则调用会立即返回，因此挂在 onStart 上没有额外开销。
      * 仓库内部自行切 IO、失败只写日志 —— 不打扰用户、无需任何手动操作。
      */
     override fun onStart() {
