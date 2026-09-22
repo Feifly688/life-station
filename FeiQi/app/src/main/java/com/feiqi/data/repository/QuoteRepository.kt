@@ -5,7 +5,9 @@ import com.feiqi.data.model.Quote
 import com.feiqi.utils.AppLogger
 import com.feiqi.utils.Quotes
 import com.google.gson.Gson
+import android.os.NetworkOnMainThreadException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,9 +16,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
 import java.time.LocalDate
+import javax.net.ssl.SSLException
 
 /** 当前语录集的来源。 */
 enum class QuoteSource { BUILT_IN, CACHE, REMOTE }
@@ -80,6 +86,9 @@ class QuoteRepository(private val appContext: Context) {
     private val _state = MutableStateFlow(QuoteState())
     val state: StateFlow<QuoteState> = _state.asStateFlow()
 
+    /** 上次发起联网更新的时间（进程内），用于失败后的快速重试节流。 */
+    private var lastAttemptAt = 0L
+
     /**
      * 启动时载入本地缓存。缓存不存在/损坏/条数过少时**保持内置语录**，不抛异常。
      */
@@ -105,7 +114,16 @@ class QuoteRepository(private val appContext: Context) {
     /**
      * 联网更新语录集。
      *
-     * @param force 为 false 时，仅当「从未成功更新」或「距上次成功更新超过 [REFRESH_INTERVAL_MS]」才真正发起请求。
+     * **线程契约**：网络与文件 IO 全部在 [Dispatchers.IO] 内完成，本方法可以安全地从任何
+     * 上下文调用（主线程也可以）——不要把线程切换的责任推给调用方：
+     * `viewModelScope` 是 `Dispatchers.Main`，一旦漏了 `withContext` 就会抛
+     * `NetworkOnMainThreadException`（v1.4.0 的实际缺陷）。
+     *
+     * **重试策略**：每个源最多尝试 [ATTEMPTS_PER_SOURCE] 次（间隔 [RETRY_DELAY_MS] 毫秒），
+     * 再换下一个源；全部失败时记录 [QuoteState.lastError]，并让下次自动更新提前到
+     * [FAIL_RETRY_INTERVAL_MS] 之后（而不是傻等 7 天）。
+     *
+     * @param force 为 false 时，仅当「该更新了」才真正发起请求（见 [isDue]）。
      */
     suspend fun refresh(force: Boolean): QuoteRefreshResult = mutex.withLock {
         val current = _state.value
@@ -117,29 +135,45 @@ class QuoteRepository(private val appContext: Context) {
         }
 
         _state.value = current.copy(refreshing = true)
-        var lastError: String? = null
+        lastAttemptAt = System.currentTimeMillis()
         try {
-            for (url in SOURCE_URLS) {
-                val attempt = runCatching { fetchAndParse(url) }
-                val quotes = attempt.getOrNull()
-                if (quotes != null) {
-                    persist(quotes)
+            // 关键：所有阻塞式网络/文件操作都切到 IO 线程。
+            val outcome = withContext(Dispatchers.IO) {
+                var failure: String? = null
+                for (url in SOURCE_URLS) {
+                    for (attempt in 1..ATTEMPTS_PER_SOURCE) {
+                        val result = runCatching { fetchAndParse(url) }
+                        val quotes = result.getOrNull()
+                        if (quotes != null) return@withContext FetchOutcome.Success(quotes)
+                        failure = describe(result.exceptionOrNull())
+                        if (attempt < ATTEMPTS_PER_SOURCE) delay(RETRY_DELAY_MS)
+                    }
+                    AppLogger.e(TAG, "语录源不可用（$url）：$failure")
+                }
+                FetchOutcome.Failure(failure ?: "网络不可用")
+            }
+
+            return@withLock when (outcome) {
+                is FetchOutcome.Success -> {
+                    persist(outcome.quotes)
                     _state.value = QuoteState(
-                        quotes = quotes,
+                        quotes = outcome.quotes,
                         source = QuoteSource.REMOTE,
                         updatedAt = System.currentTimeMillis(),
                         lastError = null,
                         refreshing = false
                     )
-                    AppLogger.i(TAG, "语录集更新成功：${quotes.size} 条（$url）")
-                    return@withLock QuoteRefreshResult(true, "已更新 ${quotes.size} 条语录", updated = true)
+                    AppLogger.i(TAG, "语录集更新成功：${outcome.quotes.size} 条")
+                    QuoteRefreshResult(true, "已更新 ${outcome.quotes.size} 条语录", updated = true)
                 }
-                lastError = attempt.exceptionOrNull()?.let { describe(it) } ?: "未知错误"
-                AppLogger.e(TAG, "语录源不可用（$url）：$lastError")
+
+                is FetchOutcome.Failure -> {
+                    // 失败：保留现有语录（缓存或内置），只记录原因，供设置页展示与手动重试。
+                    _state.value = _state.value.copy(refreshing = false, lastError = outcome.message)
+                    AppLogger.e(TAG, "语录集更新失败：${outcome.message}")
+                    QuoteRefreshResult(false, outcome.message)
+                }
             }
-            // 所有源都失败：保留现有语录（缓存或内置），只记录错误。
-            _state.value = _state.value.copy(refreshing = false, lastError = lastError)
-            return@withLock QuoteRefreshResult(false, lastError ?: "网络不可用")
         } finally {
             if (_state.value.refreshing) {
                 _state.value = _state.value.copy(refreshing = false)
@@ -150,10 +184,23 @@ class QuoteRepository(private val appContext: Context) {
     /** 当天语录（按当前生效的语录集取模）。 */
     fun daily(today: LocalDate = LocalDate.now()): Quote = _state.value.daily(today)
 
-    /** 是否到了该联网更新的时间点。 */
+    /**
+     * 是否到了该联网更新的时间点。
+     * - 从未成功过 → 距上次**尝试**（含失败）超过 [FAIL_RETRY_INTERVAL_MS] 才再试，避免每次启动都硬撞；
+     * - 成功过 → 距上次成功超过 [REFRESH_INTERVAL_MS]（7 天）。
+     */
     fun isDue(state: QuoteState = _state.value): Boolean {
-        if (state.updatedAt <= 0L) return true
-        return System.currentTimeMillis() - state.updatedAt >= REFRESH_INTERVAL_MS
+        val now = System.currentTimeMillis()
+        if (state.updatedAt <= 0L) {
+            return now - lastAttemptAt >= FAIL_RETRY_INTERVAL_MS
+        }
+        return now - state.updatedAt >= REFRESH_INTERVAL_MS
+    }
+
+    /** 本次刷新尝试的结果（域内类型，避免用异常表达失败）。 */
+    private sealed interface FetchOutcome {
+        data class Success(val quotes: List<Quote>) : FetchOutcome
+        data class Failure(val message: String) : FetchOutcome
     }
 
     // ---------------- 内部实现 ----------------
@@ -224,9 +271,15 @@ class QuoteRepository(private val appContext: Context) {
         }.onFailure { AppLogger.e(TAG, "语录缓存写入失败", it) }
     }
 
-    private fun describe(t: Throwable): String = when (t) {
-        is IOException -> t.message ?: "网络异常"
-        else -> t.message ?: t::class.simpleName ?: "未知错误"
+    /** 把异常翻译成用户能看懂的中文提示（设置页会直接展示）。 */
+    private fun describe(t: Throwable?): String = when (t) {
+        null -> "未知错误"
+        is UnknownHostException -> "网络不可用，请检查网络连接后重试"
+        is SocketTimeoutException -> "连接超时，请稍后重试"
+        is ConnectException -> "无法连接到服务器，请稍后重试"
+        is SSLException -> "安全连接建立失败，请稍后重试"
+        is NetworkOnMainThreadException -> "网络请求误在主线程执行（内部错误）"
+        else -> t.message?.takeIf { it.isNotBlank() } ?: t::class.simpleName ?: "未知错误"
     }
 
     /** 远端 `quotes.json` 的解析模型（字段全部可空，容忍不完整/脏数据）。 */
@@ -242,6 +295,11 @@ class QuoteRepository(private val appContext: Context) {
         private const val CACHE_FILE_NAME = "quotes_cache.json"
         /** 更新周期：7 天。 */
         private const val REFRESH_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
+        /** 上次失败后，多久才再自动重试一次（10 分钟）。 */
+        private const val FAIL_RETRY_INTERVAL_MS = 10L * 60 * 1000
+        /** 单个源的最大尝试次数与重试间隔。 */
+        private const val ATTEMPTS_PER_SOURCE = 2
+        private const val RETRY_DELAY_MS = 600L
         private const val CONNECT_TIMEOUT_MS = 8_000
         private const val READ_TIMEOUT_MS = 8_000
         /** 少于这个条数就认为不是一份有效语录集（防止坏数据把好数据顶掉）。 */

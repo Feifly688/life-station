@@ -59,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -150,13 +151,27 @@ internal fun QuickAddPanel(
         }
     }
 
-    /** 把焦点送到某条待办行；[atEnd] 为真时光标落到内容末尾。 */
+    /**
+     * 把焦点送到某条待办行；[atEnd] 为真时光标落到内容末尾。
+     *
+     * **同步移交**（不留 60ms 空窗）：目标行此刻**必然已在组合树中**（它就在输入行上方），
+     * 且其 FocusRequester 已注册，直接 requestFocus 即可在同一次焦点事务里完成交接。
+     * 这样旧输入框失焦与新输入框获焦发生在同一帧 → **软键盘不会先收再弹** → 不会出现
+     * 「键盘收起/弹出 + 底部卡片位置抖动」的闪屏（v1.4.0 之前这里是 delay(60) 后再请求，
+     * 中间那 60ms 焦点无处安放，正是闪屏的根源）。
+     *
+     * 仅在极少数情况下（目标行尚未组合、requester 未注册）才退回「延迟 60ms 后再请求」。
+     */
     fun focusDraft(id: String, atEnd: Boolean) {
         if (atEnd) pendingCursorAtEnd[id] = true
-        coroutineScope.launch {
-            delay(60)
-            draftFocusRequesters[id]?.safeRequestFocus()
-            keyboardController.safeShow()
+        val requester = draftFocusRequesters[id]
+        if (requester != null) {
+            requester.safeRequestFocus()
+        } else {
+            coroutineScope.launch {
+                delay(60)
+                draftFocusRequesters[id]?.safeRequestFocus()
+            }
         }
     }
 
@@ -224,21 +239,23 @@ internal fun QuickAddPanel(
                         onCursorAtEndConsumed = { pendingCursorAtEnd.remove(item.id) }
                     )
                 }
-                if (activeInputVisible) {
-                    ActiveInputRow(
-                        text = currentInput,
-                        onTextChange = onCurrentInputChange,
-                        focusRequester = focusRequester,
-                        onCommit = { onCommitCurrent() },
-                        onBackspaceOnEmpty = {
-                            // 光标回退到上一条已添加待办末尾时，收起本行（不再残留占位提示）。
-                            draftItems.lastOrNull()?.let { last ->
-                                activeInputVisible = false
-                                focusDraft(last.id, atEnd = true)
-                            }
+                // 输入行**始终保留在组合树中**（不再用 if 条件渲染）：退格回退到上一条时
+                // 只是把它的占位文案变透明，卡片高度不变 → 不会出现「卡片先缩一行」的跳变。
+                // 配合 focusDraft 的同步焦点移交，IME 全程不收起，回退路径与回车路径一样平滑。
+                ActiveInputRow(
+                    text = currentInput,
+                    placeholderVisible = activeInputVisible,
+                    onTextChange = onCurrentInputChange,
+                    focusRequester = focusRequester,
+                    onCommit = { onCommitCurrent() },
+                    onBackspaceOnEmpty = {
+                        // 光标回退到上一条已添加待办末尾：收起占位提示（但保留该行占位空间）。
+                        draftItems.lastOrNull()?.let { last ->
+                            activeInputVisible = false
+                            focusDraft(last.id, atEnd = true)
                         }
-                    )
-                }
+                    }
+                )
             }
             Spacer(modifier = Modifier.height(16.dp))
             Row(
@@ -303,6 +320,8 @@ internal fun QuickAddPanel(
 @Composable
 internal fun ActiveInputRow(
     text: String,
+    /** 是否显示占位提示。为 false 时**仅把文字设为透明**，占位空间照旧保留 → 布局零变化。 */
+    placeholderVisible: Boolean,
     onTextChange: (String) -> Unit,
     focusRequester: FocusRequester,
     onCommit: () -> Unit,
@@ -339,10 +358,15 @@ internal fun ActiveInputRow(
             ),
             decorationBox = { innerTextField ->
                 Box {
+                    // 始终参与布局（含透明态），避免占位文案的显隐导致行高变化 → 卡片跳动。
                     if (text.isEmpty()) {
                         Text(
                             text = stringResource(R.string.enter_to_add_todo),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (placeholderVisible) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                Color.Transparent
+                            },
                             style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp)
                         )
                     }
