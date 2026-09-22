@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +63,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
@@ -179,8 +179,11 @@ internal fun QuickAddPanel(
     fun deleteDraft(id: String) {
         val idx = draftItems.indexOfFirst { it.id == id }
         onDraftDelete(id)
+        // 被删掉的行的待置光标标记要一并清掉（否则万一 id 复用会让光标莫名跳到行尾）。
+        pendingCursorAtEnd.remove(id)
         val prevId = if (idx > 0) draftItems.getOrNull(idx - 1)?.id else null
         if (prevId != null) {
+            // 删除后光标落到上一条**内容末尾**（与在上一行继续输入的手感一致）。
             focusDraft(prevId, atEnd = true)
         } else {
             // 已删到首条：恢复并显示新增待办输入行，光标落到其上。
@@ -457,6 +460,20 @@ internal fun DraftItemRow(
     // 行内文本以本地 TextFieldValue 承载（需要光标位置），变更即时回传给上层草稿列表。
     var value by remember(item.id) { mutableStateOf(TextFieldValue(item.text)) }
 
+    // 收到「把光标放到行尾」的请求时执行。
+    //
+    // 为什么必须放在 LaunchedEffect 里、而不能写在 onFocusChanged 中判断 cursorAtEnd：
+    // 焦点移交是**同步**的（为消除闪屏，见 focusDraft），onFocusChanged 会在**重组之前**触发，
+    // 此时 modifier 里捕获的 cursorAtEnd 还是上一次组合的旧值（false）→ 光标不会被移到末尾、
+    // 标记也不会被消费（v1.4.1 的回归）。LaunchedEffect 在本次组合提交后运行，拿到的必然是新值，
+    // 因此顺序无关：无论先获焦还是先置标记，光标都会落到行尾，标记也会被及时消费。
+    LaunchedEffect(cursorAtEnd) {
+        if (cursorAtEnd) {
+            value = TextFieldValue(value.text, TextRange(value.text.length))
+            onCursorAtEndConsumed()
+        }
+    }
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -476,13 +493,6 @@ internal fun DraftItemRow(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
-                .onFocusChanged { state ->
-                    // 删除/退格回跳后的目标行：真正获焦时把光标移到末尾，然后消费标记。
-                    if (state.isFocused && cursorAtEnd) {
-                        value = TextFieldValue(value.text, TextRange(value.text.length))
-                        onCursorAtEndConsumed()
-                    }
-                }
                 .onKeyEvent { event ->
                     // 内容已清空后再退格一次即移除该行（输入法删除，无需确认）。
                     if (event.key == Key.Backspace && value.text.isEmpty()) {
