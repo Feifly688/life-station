@@ -73,7 +73,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.5.7</string>
+    <string name="version_value">v1.5.8</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 

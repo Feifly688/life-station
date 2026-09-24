@@ -94,6 +94,7 @@ import com.feiqi.R
 import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleListItem
+import com.feiqi.data.model.ScheduleListRules
 import com.feiqi.ui.components.ConfirmDialog
 import com.feiqi.ui.components.DeleteConfirmHost
 import com.feiqi.ui.components.DeleteConfirmState
@@ -214,15 +215,10 @@ fun ScheduleScreen(
         }
     }
 
-    // 分区：单条日程「已完成」或「已过期但当天没打卡」都归入已完成列表（过期条目仍可勾选补完成）；
-    // 清单仍以「全部条目完成」为准，避免因为清单里某一条过期就把整张清单挪走。
+    // 待办区 / 已完成区的划分规则收敛在 ScheduleListRules（纯函数 + 单测覆盖），
+    // 这里只负责取值与渲染，规则调整不再需要改动本文件。
     val today = DateUtils.today()
-    val (activeItems, completedItems) = uiState.listItems.partition {
-        when (it) {
-            is ScheduleListItem.Single -> !it.schedule.completed && !it.schedule.isOverdue(today)
-            is ScheduleListItem.Group -> !it.allCompleted
-        }
-    }
+    val (activeItems, completedItems) = ScheduleListRules.partition(uiState.listItems, today)
 
     val allItems = activeItems + completedItems
     val totalSelectable = allItems.size

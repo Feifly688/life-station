@@ -31,8 +31,8 @@ android {
         applicationId = "com.feiqi"
         minSdk = 24
         targetSdk = 35
-        versionCode = 70
-        versionName = "1.5.7"
+        versionCode = 71
+        versionName = "1.5.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

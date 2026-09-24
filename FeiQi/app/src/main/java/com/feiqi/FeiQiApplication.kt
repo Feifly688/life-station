@@ -5,11 +5,9 @@ import android.content.Context
 import androidx.room.Room
 import com.feiqi.data.database.FeiQiDatabase
 import com.feiqi.data.repository.AccountRepository
-import com.feiqi.data.repository.HabitRepository
 import com.feiqi.data.repository.MediaRepository
 import com.feiqi.data.repository.PreferencesRepository
 import com.feiqi.data.repository.QuoteRepository
-import com.feiqi.data.repository.ScheduleCompletionRepository
 import com.feiqi.data.repository.ScheduleRepository
 import com.feiqi.utils.BackupManager
 import com.feiqi.utils.ExcelExporter
@@ -110,8 +108,6 @@ class AppContainer(context: Context) {
 
     val accountRepository = AccountRepository(database.accountDao())
     val scheduleRepository = ScheduleRepository(database.scheduleDao())
-    val scheduleCompletionRepository = ScheduleCompletionRepository(database.scheduleCompletionDao())
-    val habitRepository = HabitRepository(database.habitDao(), database.habitRecordDao())
     val mediaRepository = MediaRepository(database.mediaDao())
     val preferencesRepository = PreferencesRepository(appContext)
     val backupManager = BackupManager(appContext)
