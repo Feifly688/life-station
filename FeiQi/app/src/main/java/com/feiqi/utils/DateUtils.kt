@@ -46,6 +46,32 @@ object DateUtils {
 
     fun monthDay(date: LocalDate): String = date.format(cnMonthDay)
 
+    /**
+     * 日程卡片用的**相对日期标签**：今天 / 昨天 / 明天 / 其余「M月d日」。
+     *
+     * 与 [friendly] 的区别：其余日期**不带星期**，保持卡片里原有的紧凑样式（[monthDay] 同款）。
+     * @param today 判定基准，默认取设备当天；测试可显式传入以免依赖运行日期。
+     */
+    fun relativeDate(date: LocalDate, today: LocalDate = today()): String = when (date) {
+        today -> "今天"
+        today.minusDays(1) -> "昨天"
+        today.plusDays(1) -> "明天"
+        else -> monthDay(date)
+    }
+
+    /**
+     * 日程卡片用的「日期 + 时间」单行标签：
+     * - 当天、有提醒时间 → 「今天 14:30」
+     * - 当天、无时间 → 「今天」
+     * - 非当天 → 「9月26日 14:30」/「9月26日」
+     *
+     * 只比较**日期**（不看具体时刻），因此「今天」覆盖当天 00:00–23:59 的全部日程。
+     */
+    fun dateTimeLabel(date: LocalDate, time: LocalTime?, today: LocalDate = today()): String {
+        val label = relativeDate(date, today)
+        return if (time == null) label else "$label ${hm(time)}"
+    }
+
     fun monthStart(date: LocalDate): LocalDate = date.withDayOfMonth(1)
 
     fun monthEnd(date: LocalDate): LocalDate = date.withDayOfMonth(date.lengthOfMonth())

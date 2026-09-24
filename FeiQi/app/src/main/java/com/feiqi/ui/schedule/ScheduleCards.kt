@@ -237,29 +237,16 @@ internal fun SingleScheduleCard(
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                schedule.time?.let {
-                    Text(
-                        text = DateUtils.hm(it),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                // 日期与时间合成一行：当天显示「今天 14:30」，非当天显示「9月26日 14:30」。
                 Text(
-                    text = DateUtils.monthDay(schedule.date),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = DateUtils.dateTimeLabel(schedule.date, schedule.time),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (schedule.completed) {
                     schedule.completedDate?.let {
                         Text(
-                            text = stringResource(R.string.list_completed_date, DateUtils.monthDay(it)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (schedule.reminder && schedule.time != null) {
-                        Text(
-                            text = DateUtils.hm(schedule.time),
+                            text = stringResource(R.string.list_completed_date, DateUtils.relativeDate(it)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -360,7 +347,7 @@ internal fun ScheduleGroupCard(
                     val recurrenceText = recurrenceLabel(group.recurrence)
                     val overdueText = stringResource(R.string.overdue)
                     val completedDateText = group.items.firstNotNullOfOrNull { it.completedDate }?.let {
-                        stringResource(R.string.list_completed_date, DateUtils.monthDay(it))
+                        stringResource(R.string.list_completed_date, DateUtils.relativeDate(it))
                     }
                     // 完成后附带当初设置的提醒时间（若有）
                     val reminderTimeText = group.items.firstNotNullOfOrNull { if (it.reminder) it.time else null }?.let {
@@ -381,10 +368,7 @@ internal fun ScheduleGroupCard(
                             reminderTimeText?.let { parts += it }
                         } else {
                             group.items.filter { !it.completed }.minByOrNull { it.date }?.let { near ->
-                                parts += buildString {
-                                    append(DateUtils.monthDay(near.date))
-                                    near.time?.let { t -> append(" ").append(DateUtils.hm(t)) }
-                                }
+                                parts += DateUtils.dateTimeLabel(near.date, near.time)
                             }
                         }
                         if (group.isRecurring) parts += recurrenceText

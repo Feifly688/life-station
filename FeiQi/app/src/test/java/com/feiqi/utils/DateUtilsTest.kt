@@ -5,6 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -34,6 +35,53 @@ class DateUtilsTest {
         val far = t.plusDays(5)
         val expected = far.format(DateTimeFormatter.ofPattern("M月d日 E", Locale.CHINA))
         assertEquals(expected, DateUtils.friendly(far))
+    }
+
+    // ---------------- 日程卡片：相对日期 / 日期+时间标签 ----------------
+
+    @Test
+    fun relativeDate_today() {
+        val t = DateUtils.today()
+        assertEquals("今天", DateUtils.relativeDate(t))
+        // 当天的任何时刻都算今天（只比较日期，与时分无关）
+        assertEquals("今天", DateUtils.relativeDate(t, t))
+    }
+
+    @Test
+    fun relativeDate_yesterdayAndTomorrow() {
+        val t = DateUtils.today()
+        assertEquals("昨天", DateUtils.relativeDate(t.minusDays(1), t))
+        assertEquals("明天", DateUtils.relativeDate(t.plusDays(1), t))
+    }
+
+    @Test
+    fun relativeDate_otherDays_useMonthDayWithoutWeekday() {
+        val t = DateUtils.today()
+        val far = t.plusDays(5)
+        val expected = far.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA))
+        assertEquals(expected, DateUtils.relativeDate(far, t))
+        // 与 friendly() 不同：不带星期
+        assertTrue(!DateUtils.relativeDate(far, t).contains("周"))
+    }
+
+    @Test
+    fun dateTimeLabel_todayWithTime() {
+        val t = DateUtils.today()
+        assertEquals("今天 14:30", DateUtils.dateTimeLabel(t, LocalTime.of(14, 30), t))
+    }
+
+    @Test
+    fun dateTimeLabel_todayWithoutTime() {
+        val t = DateUtils.today()
+        assertEquals("今天", DateUtils.dateTimeLabel(t, null, t))
+    }
+
+    @Test
+    fun dateTimeLabel_otherDayWithTime() {
+        val t = DateUtils.today()
+        val d = t.plusDays(2)
+        val expected = d.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)) + " 09:05"
+        assertEquals(expected, DateUtils.dateTimeLabel(d, LocalTime.of(9, 5), t))
     }
 
     @Test
