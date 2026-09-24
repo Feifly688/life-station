@@ -84,7 +84,8 @@ private fun ScheduleEntity.toModel(): Schedule {
         recurrence = Recurrence.from(recurrence),
         itemOrder = itemOrder,
         lastResetDate = lastResetDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
-        completedDate = completedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        completedDate = completedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        completedLate = completedLate
     )
 }
 
@@ -104,6 +105,7 @@ private fun Schedule.toEntity(): ScheduleEntity {
         recurrence = recurrence.code,
         itemOrder = itemOrder,
         lastResetDate = lastResetDate?.let { DateUtils.iso(it) },
-        completedDate = completedDate?.let { DateUtils.iso(it) }
+        completedDate = completedDate?.let { DateUtils.iso(it) },
+        completedLate = completedLate
     )
 }

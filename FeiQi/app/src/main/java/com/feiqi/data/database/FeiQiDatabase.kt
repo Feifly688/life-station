@@ -21,7 +21,7 @@ import com.feiqi.data.entity.ScheduleEntity
         HabitRecordEntity::class,
         MediaEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class FeiQiDatabase : RoomDatabase() {
@@ -133,6 +133,15 @@ abstract class FeiQiDatabase : RoomDatabase() {
          * 低版本 SQLite 不支持 DROP COLUMN，故沿用 4→5 的做法重建表；
          * 旧数据映射：isRecurring = 1 → 'DAILY'，否则 'NONE'。
          */
+        /** v10：日程增加「过期后补完成」标记，让「已过期」标签在标记完成后仍然保留。 */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE schedules ADD COLUMN completedLate INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

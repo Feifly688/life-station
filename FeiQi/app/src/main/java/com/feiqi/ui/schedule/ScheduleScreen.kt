@@ -214,9 +214,12 @@ fun ScheduleScreen(
         }
     }
 
+    // 分区：单条日程「已完成」或「已过期但当天没打卡」都归入已完成列表（过期条目仍可勾选补完成）；
+    // 清单仍以「全部条目完成」为准，避免因为清单里某一条过期就把整张清单挪走。
+    val today = DateUtils.today()
     val (activeItems, completedItems) = uiState.listItems.partition {
         when (it) {
-            is ScheduleListItem.Single -> !it.schedule.completed
+            is ScheduleListItem.Single -> !it.schedule.completed && !it.schedule.isOverdue(today)
             is ScheduleListItem.Group -> !it.allCompleted
         }
     }

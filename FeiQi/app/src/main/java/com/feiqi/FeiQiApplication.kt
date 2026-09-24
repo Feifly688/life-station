@@ -103,7 +103,8 @@ class AppContainer(context: Context) {
             FeiQiDatabase.MIGRATION_5_6,
             FeiQiDatabase.MIGRATION_6_7,
             FeiQiDatabase.MIGRATION_7_8,
-            FeiQiDatabase.MIGRATION_8_9
+            FeiQiDatabase.MIGRATION_8_9,
+            FeiQiDatabase.MIGRATION_9_10
         )
         .build()
 

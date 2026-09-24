@@ -25,13 +25,35 @@ data class Schedule(
     val recurrence: Recurrence = Recurrence.NONE,
     val itemOrder: Int = 0,
     val lastResetDate: LocalDate? = null,
-    val completedDate: LocalDate? = null
+    val completedDate: LocalDate? = null,
+
+    /**
+     * 是否「过期后才补完成」（v10）：
+     * 完成的那一刻应完成时间已过 → 完成态下仍保留「已过期」标签。
+     * 未完成条目的过期状态由 [isOverdue] 实时推导，不写库。
+     */
+    val completedLate: Boolean = false
 ) {
     /** 是否循环条目（兼容既有调用点）。 */
     val isRecurring: Boolean get() = recurrence.isRepeating
 
     /** 是否处于「无时间」状态：不填时间即以未定时待办存在，不参与逾期判定。 */
     val untimed: Boolean get() = time == null
+
+    /**
+     * 是否「已过期（当天未按时）」：
+     * - 未开启提醒 → 不参与逾期判定（与既有口径一致）；
+     * - `date < today` → 过期（跨日仍未见完成）；
+     * - `date == today` 且设置了时间且当前已过该时刻 → 过期；
+     * - 其余（含无时间的当天项）→ 未过期。
+     *
+     * @param today 判定基准日；[now] 判定时刻。两者默认取设备当前值，测试可显式传入。
+     */
+    fun isOverdue(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean {
+        if (!reminder) return false
+        if (date < today) return true
+        return date == today && time != null && now > time
+    }
 }
 
 data class ScheduleUiState(

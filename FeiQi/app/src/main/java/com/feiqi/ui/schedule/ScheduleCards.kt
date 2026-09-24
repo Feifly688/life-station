@@ -175,8 +175,10 @@ internal fun SingleScheduleCard(
     modifier: Modifier = Modifier
 ) {
     val today = DateUtils.today()
-    val isOverdue = isScheduleOverdue(schedule.date, schedule.time, schedule.reminder, today) &&
-        !schedule.completed
+    // 未完成 → 过期状态实时推导（用于红色底与标签）；已完成 → 只看「过期后补完成」标记，
+    // 因此补打卡不会抹掉「已过期」标签，按时完成也不会在事后被误标过期。
+    val isOverdue = schedule.isOverdue(today) && !schedule.completed
+    val showOverdue = if (schedule.completed) schedule.completedLate else isOverdue
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -228,7 +230,7 @@ internal fun SingleScheduleCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (isOverdue) {
+                if (showOverdue) {
                     Text(
                         text = stringResource(R.string.overdue),
                         style = MaterialTheme.typography.labelSmall,
@@ -280,7 +282,7 @@ internal fun ScheduleGroupCard(
 ) {
     val today = DateUtils.today()
     val hasOverdue = group.items.any {
-        isScheduleOverdue(it.date, it.time, it.reminder, today) && !it.completed
+        if (it.completed) it.completedLate else it.isOverdue(today)
     }
     val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "arrow")
 
@@ -372,7 +374,7 @@ internal fun ScheduleGroupCard(
                             }
                         }
                         if (group.isRecurring) parts += recurrenceText
-                        if (hasOverdue && !isCompleted) parts += overdueText
+                        if (hasOverdue) parts += overdueText
                         parts.joinToString(" · ")
                     }
                     if (subInfo.isNotBlank()) {
@@ -512,24 +514,3 @@ internal fun CompletedSectionHeader(
     }
 }
 
-/**
- * 判断日程是否「提醒时间已过」（仅对**已设置提醒**的条目生效）：
- * - 未设置提醒（reminder = false，即无时间待办）→ **永不判逾期**，由用户手动完成或删除；
- * - date < today → 过期
- * - date == today 且 time != null 且 now > time → 过期（今天但提醒时间已过）
- * - date == today 且 time == null → 视为「当天提醒」，未过期
- * - date > today → 未过期
- */
-private fun isScheduleOverdue(
-    date: java.time.LocalDate,
-    time: java.time.LocalTime?,
-    reminder: Boolean,
-    today: java.time.LocalDate
-): Boolean {
-    if (!reminder) return false
-    if (date < today) return true
-    if (date == today && time != null) {
-        return java.time.LocalTime.now() > time
-    }
-    return false
-}

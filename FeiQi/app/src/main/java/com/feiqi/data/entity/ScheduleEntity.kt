@@ -1,5 +1,6 @@
 package com.feiqi.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -30,5 +31,9 @@ data class ScheduleEntity(
     val recurrence: String = "NONE",
     val itemOrder: Int = 0,
     val lastResetDate: String? = null, // yyyy-MM-dd，记录循环清单最后一次重置日期
-    val completedDate: String? = null // yyyy-MM-dd，记录清单全部完成时的日期
+    val completedDate: String? = null, // yyyy-MM-dd，记录清单全部完成时的日期
+
+    // v10：过期后补完成的标记（完成态下仍显示「已过期」）。默认 false 以兼容既有行与旧备份。
+    @ColumnInfo(defaultValue = "0")
+    val completedLate: Boolean = false
 )
