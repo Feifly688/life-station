@@ -77,11 +77,30 @@ class DateUtilsTest {
     }
 
     @Test
-    fun dateTimeLabel_otherDayWithTime() {
+    fun dateTimeLabel_tomorrowWithTime() {
+        val t = DateUtils.today()
+        assertEquals("明天 14:30", DateUtils.dateTimeLabel(t.plusDays(1), LocalTime.of(14, 30), t))
+    }
+
+    @Test
+    fun dateTimeLabel_tomorrowWithoutTime() {
+        val t = DateUtils.today()
+        assertEquals("明天", DateUtils.dateTimeLabel(t.plusDays(1), null, t))
+    }
+
+    @Test
+    fun dateTimeLabel_fartherDay_showsDateOnly() {
+        // 只有今天/明天精确到时分；其余日期即使有时间也只显示日期
         val t = DateUtils.today()
         val d = t.plusDays(2)
-        val expected = d.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)) + " 09:05"
+        val expected = d.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA))
         assertEquals(expected, DateUtils.dateTimeLabel(d, LocalTime.of(9, 5), t))
+    }
+
+    @Test
+    fun dateTimeLabel_pastDay_showsDateOnly() {
+        val t = DateUtils.today()
+        assertEquals("昨天", DateUtils.dateTimeLabel(t.minusDays(1), LocalTime.of(9, 5), t))
     }
 
     @Test

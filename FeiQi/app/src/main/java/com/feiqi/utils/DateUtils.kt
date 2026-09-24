@@ -60,16 +60,20 @@ object DateUtils {
     }
 
     /**
-     * 日程卡片用的「日期 + 时间」单行标签：
-     * - 当天、有提醒时间 → 「今天 14:30」
-     * - 当天、无时间 → 「今天」
-     * - 非当天 → 「9月26日 14:30」/「9月26日」
+     * 日程卡片用的「日期 + 时间」标签。
+     *
+     * **只有近期待办（今天 / 明天）才精确到时分**，其余只显示日期：
+     * - 今天、有提醒时间 → 「今天 14:30」
+     * - 明天、有提醒时间 → 「明天 14:30」
+     * - 今天 / 明天、无时间 → 「今天」/「明天」
+     * - 其他日期 → 「9月26日」（不带时分；[relativeDate] 对昨天/更早同样只给日期）
      *
      * 只比较**日期**（不看具体时刻），因此「今天」覆盖当天 00:00–23:59 的全部日程。
      */
     fun dateTimeLabel(date: LocalDate, time: LocalTime?, today: LocalDate = today()): String {
         val label = relativeDate(date, today)
-        return if (time == null) label else "$label ${hm(time)}"
+        val isNearTerm = date == today || date == today.plusDays(1)
+        return if (time != null && isNearTerm) "$label ${hm(time)}" else label
     }
 
     fun monthStart(date: LocalDate): LocalDate = date.withDayOfMonth(1)
