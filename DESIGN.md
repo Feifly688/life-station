@@ -149,7 +149,7 @@ Compose **原生没有背景模糊（backdrop blur）**：`Modifier.blur` 模糊
 | **主按钮** | 高 48dp、`pill`、`Primary` 填充、`labelLarge`；一屏最多 1 个 |
 | **次按钮** | 高 40dp、`sm` 圆角、透明底 + `Outline` 边、文字 `Primary` |
 | **文字按钮** | 无底无边，`labelLarge` + `Primary`；仅用于"全部/调整布局"这类轻操作 |
-| **卡片** | `lg` 圆角、`Surface` 底、无描边、`card` 级阴影、内边距 `lg` |
+| **卡片** | `lg` 圆角、`Surface` 底、无描边、`card` 级阴影、内边距 `lg`；**首页可排序区块外框统一等高**（= 内容最高值，内容尺寸不变、框内垂直居中，见 §7） |
 | **统计卡** | 高 ≥100dp（**用 `heightIn(min)` 不用固定高**，随系统字号自适应）、语义底色、`titleLarge` 数值 + `labelSmall` 说明 |
 | **弹窗** | `xl` 圆角、玻璃面（Thick）、宽 ≤ 屏宽-32dp、标题 `titleMedium`、动作右对齐 |
 | **底部导航** | 玻璃面（Regular）+ 顶部 1dp 高光边；图标 24dp、标签 `labelSmall`；选中态用 `Primary` |

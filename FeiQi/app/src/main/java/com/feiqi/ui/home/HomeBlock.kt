@@ -2,6 +2,7 @@ package com.feiqi.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.feiqi.data.model.HomeCard
@@ -46,7 +49,9 @@ import kotlin.math.roundToInt
  * 位移只作用在**视觉层**（[Modifier.offset]），不改变测量尺寸，因此
  * [onHeightMeasured] 汇报的高度始终稳定，可用于相邻交换的阈值判断。
  *
- * @param onHeightMeasured 上报本区块实测高度（像素），父层用它决定"拖过一半就交换"。
+ * @param frameHeight 统一外框高度（所有卡片一致，父层取"内容最高值"下发）；`null` 表示尚未测出。
+ * @param onHeightMeasured 上报本区块（外框）实测高度，父层用它决定"拖过一半就交换"。
+ * @param onContentHeight 上报**内容固有高度**（不受外框高度约束），父层据此算出统一外框高度。
  */
 @Composable
 internal fun HomeBlock(
@@ -54,7 +59,9 @@ internal fun HomeBlock(
     editing: Boolean,
     dragging: Boolean,
     dragOffsetY: Float,
+    frameHeight: Dp?,
     onHeightMeasured: (Int) -> Unit,
+    onContentHeight: (Int) -> Unit,
     onDragStart: () -> Unit,
     /** 参数：本次位移（像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。 */
     onDragDelta: (Float, Float) -> Unit,
@@ -122,7 +129,24 @@ internal fun HomeBlock(
             }
         }
 
-        content()
+        // 统一外框（DESIGN.md §6）：所有卡片同宽同高，内容尺寸保持不变、框内垂直居中，
+        // 便于统一移动与网格化管理（参考桌面图标 / 看板 / 仪表盘）。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (frameHeight != null) Modifier.height(frameHeight) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // 以自身固有高度测量：既不被外框压扁，也让父层拿到真实内容高度
+                    .wrapContentHeight(unbounded = true)
+                    .onGloballyPositioned { onContentHeight(it.size.height) }
+            ) {
+                content()
+            }
+        }
 
         if (editing) Spacer(modifier = Modifier.height(6.dp))
     }

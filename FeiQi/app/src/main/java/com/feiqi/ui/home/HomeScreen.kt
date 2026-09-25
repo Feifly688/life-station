@@ -1,7 +1,11 @@
 package com.feiqi.ui.home
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +74,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.feiqi.R
 import com.feiqi.data.model.AccountRecord
@@ -116,6 +120,9 @@ private val HOME_EDGE_SCROLL_ZONE = 96.dp
 private val HOME_EDGE_SCROLL_MIN = 2.dp
 private val HOME_EDGE_SCROLL_MAX = 16.dp
 
+/** 松手归位动画时长（ms）：太快像瞬移，太慢显得拖沓。 */
+private const val HOME_SNAP_DURATION_MS = 220
+
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
@@ -140,6 +147,14 @@ fun HomeScreen(
     var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
     val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
+    // 各卡片**内容固有高度**：取最大值作为统一外框高度（各卡片外框同高，内容尺寸不变）
+    val contentHeights = remember { mutableStateMapOf<HomeCard, Int>() }
+    val densityForFrame = LocalDensity.current
+    val uniformFrameHeight: Dp? = contentHeights.values.maxOrNull()
+        ?.let { with(densityForFrame) { it.toDp() } }
+    // 松手后进入"归位动画"阶段的卡片：视觉上仍按被抬起渲染，直到位移回零
+    var settlingCard by remember { mutableStateOf<HomeCard?>(null) }
+    val activeCard: HomeCard? = draggingCard ?: settlingCard
 
     // ---------------- 拖拽辅助：列表状态 / 可视区边界 / 边缘自动滚动 ----------------
     val listState = rememberLazyListState()
@@ -204,6 +219,20 @@ fun HomeScreen(
             canScrollUp = canScrollUp,
             canScrollDown = canScrollDown
         )
+    }
+
+    // 松手吸附：不在合法槽位时**平滑**回到最近合法槽位（即位移回零），结束后无任何残留偏移
+    LaunchedEffect(settlingCard) {
+        val card = settlingCard ?: return@LaunchedEffect
+        val from = dragOffsetY
+        if (from != 0f) {
+            Animatable(from).animateTo(
+                targetValue = 0f,
+                animationSpec = tween(HOME_SNAP_DURATION_MS, easing = FastOutSlowInEasing)
+            ) { dragOffsetY = value }
+        }
+        dragOffsetY = 0f
+        settlingCard = null
     }
 
     // 拖动期间逐帧滚动；滚动量补偿进拖拽位移，被拖卡片才能继续跟手（不脱手、不跳变）
@@ -344,20 +373,24 @@ fun HomeScreen(
             HomeBlock(
                 card = card,
                 editing = layoutEditing,
-                dragging = draggingCard == card,
-                dragOffsetY = if (draggingCard == card) dragOffsetY else 0f,
-                onHeightMeasured = { blockHeights[card] = it },
+                dragging = activeCard == card,
+                dragOffsetY = if (activeCard == card) dragOffsetY else 0f,
+                frameHeight = uniformFrameHeight,
+                onHeightMeasured = { h -> if (blockHeights[card] != h) blockHeights[card] = h },
+                onContentHeight = { h -> if (contentHeights[card] != h) contentHeights[card] = h },
                 onDragStart = {
                     draggingCard = card
                     dragOffsetY = 0f
                 },
                 onDragDelta = { delta, pointerY -> onBlockDrag(card, delta, pointerY) },
                 onDragEnd = {
-                    // 松手即归位：清掉拖动中间态，卡片落在最终顺序对应的槽位上
+                    // 松手后若仍有位移（未落在合法槽位），进入平滑归位动画；
+                    // 动画由 LaunchedEffect(settlingCard) 负责，结束后位移必为 0
+                    val card = draggingCard
                     draggingCard = null
-                    dragOffsetY = 0f
                     autoScrollStep = 0f
                     dragPointerRootY = 0f
+                    if (card != null) settlingCard = card else dragOffsetY = 0f
                 }
             ) {
                 when (card) {
