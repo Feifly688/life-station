@@ -51,17 +51,24 @@ object FeiQiMotion {
  * - [fillAlpha]：半透明填充不透明度（越大越不透、可读性越好）；
  * - [borderAlpha]：1dp 高光边的不透明度；
  * - [highlightAlpha]：顶部内高光（模拟折射）的不透明度；
+ * - [sheenAlpha]：斜向反光带（sheen）的不透明度 —— 让玻璃在浅色底上也能被看见；
  * - [blurRadius]：阴影模糊半径，越大越"浮"。
  */
-enum class GlassStrength(val fillAlpha: Float, val borderAlpha: Float, val highlightAlpha: Float, val blurRadius: Int) {
-    /** 轻：贴在内容上方但信息密度高（如导航栏）。 */
-    Thin(0.62f, 0.38f, 0.30f, 16),
+enum class GlassStrength(
+    val fillAlpha: Float,
+    val borderAlpha: Float,
+    val highlightAlpha: Float,
+    val sheenAlpha: Float,
+    val blurRadius: Int
+) {
+    /** 轻：贴在内容上方但信息密度高（如导航栏、海报卡）。 */
+    Thin(0.55f, 0.55f, 0.34f, 0.26f, 16),
 
     /** 常规：多数浮层/卡片（默认）。 */
-    Regular(0.76f, 0.45f, 0.38f, 20),
+    Regular(0.68f, 0.62f, 0.40f, 0.20f, 20),
 
     /** 厚：需要强可读性的面（弹窗、表单面板）。 */
-    Thick(0.88f, 0.52f, 0.46f, 24)
+    Thick(0.82f, 0.68f, 0.44f, 0.15f, 24)
 }
 
 /** 玻璃面的高光边颜色：暖白而非纯白，避免发灰。 */

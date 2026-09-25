@@ -3,6 +3,7 @@ package com.feiqi.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -52,14 +54,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -105,6 +111,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+// 拖拽到边缘时的自动滚动参数：感应区高度、每帧最小/最大滚动量
+private val HOME_EDGE_SCROLL_ZONE = 96.dp
+private val HOME_EDGE_SCROLL_MIN = 2.dp
+private val HOME_EDGE_SCROLL_MAX = 16.dp
+
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun HomeScreen(
@@ -130,12 +141,33 @@ fun HomeScreen(
     var dragOffsetY by remember { mutableStateOf(0f) }
     val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
 
+    // ---------------- 拖拽辅助：列表状态 / 可视区边界 / 边缘自动滚动 ----------------
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    var listTopInRoot by remember { mutableStateOf(0f) }
+    var listBottomInRoot by remember { mutableStateOf(0f) }
+    // 每帧滚动像素（带符号）：>0 向下滚、<0 向上滚；数值由指针贴近边缘的程度决定
+    var autoScrollStep by remember { mutableStateOf(0f) }
+
+    // 拖动期间逐帧滚动；滚动量补偿进拖拽位移，被拖卡片才能继续跟手（不脱手、不跳变）
+    LaunchedEffect(draggingCard) {
+        while (draggingCard != null) {
+            val step = autoScrollStep
+            if (step != 0f) {
+                val consumed = listState.scrollBy(step)
+                if (consumed != 0f) dragOffsetY += consumed
+            }
+            withFrameNanos { }
+        }
+        autoScrollStep = 0f
+    }
+
     /**
      * 拖动位移处理：累计位移越过相邻区块**一半高度**即与它交换位置（边拖边换，实时重排），
      * 再从位移里减去被越过区块的高度，保证剩余位移继续跟手、不跳变。
      * 每次交换都立刻持久化（拖动中即保存），松手时顺序已是最终顺序。
      */
-    fun onBlockDrag(card: HomeCard, deltaY: Float) {
+    fun onBlockDrag(card: HomeCard, deltaY: Float, pointerRootY: Float) {
         dragOffsetY += deltaY
         val index = cardOrder.indexOf(card)
         if (index < 0) return
@@ -151,6 +183,23 @@ fun HomeScreen(
                 viewModel.moveCard(index, index - 1)
                 dragOffsetY += prevHeight
             }
+        }
+        // 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）
+        val zone = with(density) { HOME_EDGE_SCROLL_ZONE.toPx() }
+        val minStep = with(density) { HOME_EDGE_SCROLL_MIN.toPx() }
+        val maxStep = with(density) { HOME_EDGE_SCROLL_MAX.toPx() }
+        autoScrollStep = when {
+            pointerRootY < listTopInRoot + zone -> {
+                val ratio = ((listTopInRoot + zone - pointerRootY) / zone).coerceIn(0f, 1f)
+                -(minStep + ratio * (maxStep - minStep))
+            }
+
+            pointerRootY > listBottomInRoot - zone -> {
+                val ratio = ((pointerRootY - (listBottomInRoot - zone)) / zone).coerceIn(0f, 1f)
+                minStep + ratio * (maxStep - minStep)
+            }
+
+            else -> 0f
         }
     }
     val deleteConfirm = rememberDeleteConfirm()
@@ -179,9 +228,18 @@ fun HomeScreen(
     )
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .pullRefresh(pullState),
+                .onGloballyPositioned { coords ->
+                    // 记录可视区上下边界（根坐标），供边缘自动滚动判断
+                    val top = coords.localToRoot(Offset.Zero).y
+                    val bottom = top + coords.size.height
+                    if (top != listTopInRoot) listTopInRoot = top
+                    if (bottom != listBottomInRoot) listBottomInRoot = bottom
+                }
+                // 编辑布局时关闭下拉刷新：拖拽是纵向手势，否则极易误触刷新
+                .pullRefresh(pullState, enabled = !layoutEditing && draggingCard == null),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
         item {
@@ -261,7 +319,7 @@ fun HomeScreen(
                     draggingCard = card
                     dragOffsetY = 0f
                 },
-                onDragDelta = { delta -> onBlockDrag(card, delta) },
+                onDragDelta = { delta, pointerY -> onBlockDrag(card, delta, pointerY) },
                 onDragEnd = {
                     draggingCard = null
                     dragOffsetY = 0f
@@ -597,7 +655,7 @@ private fun QuoteCard(quote: String, author: String? = null, modifier: Modifier 
             .padding(horizontal = FeiQiSpacing.lg),
         shape = RoundedCornerShape(FeiQiRadius.lg),
         strength = GlassStrength.Thin,
-        elevated = false
+        elevated = true
     ) {
         Column(modifier = Modifier.padding(FeiQiSpacing.lg + FeiQiSpacing.xs)) {
             Text(

@@ -20,11 +20,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.feiqi.R
 import com.feiqi.ui.theme.GlassBorderLight
 import com.feiqi.ui.theme.GlassStrength
+import com.feiqi.ui.theme.GlassShadowTint
 
 sealed class BottomTab(val route: String, val labelRes: Int, val icon: @Composable () -> Unit) {
     data object Home : BottomTab("home", R.string.tab_home, { Icon(Icons.Default.Home, contentDescription = null) })
@@ -56,8 +60,21 @@ fun FeiQiBottomBar(
     onTabSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val surface = MaterialTheme.colorScheme.surface
-    Box(modifier = modifier.fillMaxWidth()) {
+    val scheme = MaterialTheme.colorScheme
+    // 暖调玻璃基色（纯白在米白底上"看不见"，必须带暖调才显出玻璃感）
+    val glassFill = lerp(scheme.surface, scheme.secondary, 0.16f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            // 顶部抬升阴影：导航栏读起来是"浮起来的玻璃条"，而不是贴平的一块白
+            .shadow(
+                elevation = 12.dp,
+                shape = RectangleShape,
+                clip = false,
+                ambientColor = GlassShadowTint.copy(alpha = 0.18f),
+                spotColor = GlassShadowTint.copy(alpha = 0.24f)
+            )
+    ) {
         // 玻璃底：上缘更透（隐约透出内容），下缘更实（保证标签可读）
         Box(
             modifier = Modifier
@@ -65,19 +82,26 @@ fun FeiQiBottomBar(
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            surface.copy(alpha = GlassStrength.Thin.fillAlpha - 0.10f),
-                            surface.copy(alpha = 0.94f)
+                            glassFill.copy(alpha = GlassStrength.Thin.fillAlpha - 0.14f),
+                            glassFill.copy(alpha = 0.95f)
                         )
                     )
                 )
         )
-        // 顶部高光边：玻璃与内容的交界面
+        // 顶部双色调边：上白高光 + 下淡暗边，做出玻璃断面
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(GlassBorderLight.copy(alpha = GlassStrength.Regular.borderAlpha))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            GlassBorderLight.copy(alpha = GlassStrength.Regular.borderAlpha),
+                            scheme.onSurface.copy(alpha = 0.06f)
+                        )
+                    )
+                )
         )
 
         NavigationBar(

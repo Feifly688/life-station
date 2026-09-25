@@ -29,13 +29,13 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    // 液态玻璃弹窗（DESIGN.md §4）：厚档半透明 + xl 圆角 + 高光边；透出的底色是被压暗的页面内容
+    // 液态玻璃弹窗（DESIGN.md §4）：暖调半透明 + xl 圆角 + 双色调边；透出的底色是被 scrim 压暗的页面内容
     val shape = RoundedCornerShape(FeiQiRadius.xl)
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
         shape = shape,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
+        containerColor = glassContainerColor(GlassStrength.Thick),
         title = { Text(title) },
         text = { Text(text, color = MaterialTheme.colorScheme.onSurface) },
         confirmButton = {
@@ -66,7 +66,7 @@ fun TextEditDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
         shape = shape,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
+        containerColor = glassContainerColor(GlassStrength.Thick),
         title = { Text(title) },
         text = {
             OutlinedTextField(
@@ -107,7 +107,7 @@ fun InfoDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
         shape = shape,
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
+        containerColor = glassContainerColor(GlassStrength.Thick),
         title = { Text(title) },
         text = { Text(text, color = MaterialTheme.colorScheme.onSurface) },
         confirmButton = {

@@ -18,10 +18,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.IntOffset
@@ -51,11 +56,14 @@ internal fun HomeBlock(
     dragOffsetY: Float,
     onHeightMeasured: (Int) -> Unit,
     onDragStart: () -> Unit,
-    onDragDelta: (Float) -> Unit,
+    /** 参数：本次位移（像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。 */
+    onDragDelta: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
+    // 手柄在根坐标系中的 Y：拖动时用它换算指针的绝对位置（用于边缘自动滚动）
+    var handleTopInRoot by remember(card) { mutableStateOf(0f) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -91,13 +99,15 @@ internal fun HomeBlock(
                     modifier = Modifier
                         .size(40.dp)
                         .padding(8.dp)
+                        .onGloballyPositioned { handleTopInRoot = it.localToRoot(Offset.Zero).y }
                         // 手柄独占拖动：不影响区块内部卡片的点击与列表滚动
                         .pointerInput(card) {
                             detectDragGestures(
                                 onDragStart = { onDragStart() },
                                 onDrag = { change, dragAmount ->
                                     change.consume()
-                                    onDragDelta(dragAmount.y)
+                                    // 指针绝对 Y = 手柄根坐标 + 指针在手柄内的局部 Y
+                                    onDragDelta(dragAmount.y, handleTopInRoot + change.position.y)
                                 },
                                 onDragEnd = { onDragEnd() },
                                 onDragCancel = { onDragEnd() }
