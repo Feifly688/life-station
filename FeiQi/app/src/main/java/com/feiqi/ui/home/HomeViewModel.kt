@@ -3,6 +3,7 @@ package com.feiqi.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.feiqi.data.model.AccountRecord
+import com.feiqi.data.model.HomeCard
 import com.feiqi.data.model.HomeUiState
 import com.feiqi.data.model.Media
 import com.feiqi.data.model.Recurrence
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -40,6 +42,36 @@ class HomeViewModel(
 
     private val _events = MutableSharedFlow<String>()
     val events = _events.asSharedFlow()
+
+    /**
+     * 首页区块顺序。**单一真源在 ViewModel 内存里**（拖动时同步更新，保证实时渲染），
+     * 每次变更异步落到 DataStore；外部（重启后加载）变更通过 collect 回填。
+     */
+    private val _cardOrder = MutableStateFlow(HomeCard.DEFAULT_ORDER)
+    val cardOrder: StateFlow<List<HomeCard>> = _cardOrder.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            preferencesRepository.homeCardOrder.collect { stored -> _cardOrder.value = stored }
+        }
+    }
+
+    /**
+     * 把第 [from] 个区块移动到第 [to] 个位置并立即保存。
+     *
+     * 拖动过程中每跨过一个相邻区块调用一次（不是每帧），写入内容是一个极短的字符串，
+     * 因此既满足「拖动中实时更新并保存」，也不会造成频繁写盘。
+     */
+    fun moveCard(from: Int, to: Int) {
+        val current = _cardOrder.value
+        val moved = HomeCard.move(current, from, to)
+        if (moved == current) return
+        _cardOrder.value = moved   // 先同步生效，UI 立刻按新顺序渲染
+        viewModelScope.launch {
+            runCatching { preferencesRepository.setHomeCardOrder(moved) }
+                .onFailure { _events.emit("保存布局失败：${it.message}") }
+        }
+    }
 
     private val recentRecords = accountRepository.getRecent(5)
     private val monthExpense = accountRepository.getExpenseForMonth(today)

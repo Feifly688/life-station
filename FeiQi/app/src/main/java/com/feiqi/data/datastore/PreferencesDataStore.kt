@@ -22,6 +22,8 @@ class PreferencesDataStore(private val context: Context) {
         val WEIGHT_RECORDS = stringPreferencesKey("weight_records")
         val USER_PROFILE = stringPreferencesKey("user_profile")
         val SHOPPING_ITEMS = stringPreferencesKey("shopping_items")
+        /** 首页卡片排列顺序（逗号分隔的卡片 id）；为空表示使用默认顺序。 */
+        val HOME_CARD_ORDER = stringPreferencesKey("home_card_order")
     }
 
     val monthlyBudget: Flow<Double> = context.dataStore.data.map { prefs ->
@@ -51,6 +53,17 @@ class PreferencesDataStore(private val context: Context) {
     suspend fun setHabitReminderEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.HABIT_REMINDER_ENABLED] = enabled
+        }
+    }
+
+    /** 首页卡片顺序的原始串（空串 = 尚未自定义，按默认顺序渲染）。 */
+    val homeCardOrder: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[Keys.HOME_CARD_ORDER] ?: ""
+    }
+
+    suspend fun setHomeCardOrder(value: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.HOME_CARD_ORDER] = value
         }
     }
 

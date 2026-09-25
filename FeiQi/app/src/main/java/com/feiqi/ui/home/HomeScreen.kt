@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -48,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.feiqi.R
 import com.feiqi.data.model.AccountRecord
+import com.feiqi.data.model.HomeCard
 import com.feiqi.data.model.Media
 import com.feiqi.data.model.MediaType
 import com.feiqi.data.model.Schedule
@@ -116,6 +119,37 @@ fun HomeScreen(
     var shoppingTabBought by remember { mutableStateOf(false) }
     var previewMedia by remember { mutableStateOf<Media?>(null) }
     var editingRecord by remember { mutableStateOf<AccountRecord?>(null) }
+
+    // ---------------- 首页布局编辑（区块顺序持久化在 DataStore） ----------------
+    val cardOrder by viewModel.cardOrder.collectAsStateWithLifecycle()
+    var layoutEditing by remember { mutableStateOf(false) }
+    var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
+
+    /**
+     * 拖动位移处理：累计位移越过相邻区块**一半高度**即与它交换位置（边拖边换，实时重排），
+     * 再从位移里减去被越过区块的高度，保证剩余位移继续跟手、不跳变。
+     * 每次交换都立刻持久化（拖动中即保存），松手时顺序已是最终顺序。
+     */
+    fun onBlockDrag(card: HomeCard, deltaY: Float) {
+        dragOffsetY += deltaY
+        val index = cardOrder.indexOf(card)
+        if (index < 0) return
+        if (dragOffsetY > 0 && index < cardOrder.lastIndex) {
+            val nextHeight = blockHeights[cardOrder[index + 1]] ?: 0
+            if (nextHeight > 0 && dragOffsetY > nextHeight / 2f) {
+                viewModel.moveCard(index, index + 1)
+                dragOffsetY -= nextHeight
+            }
+        } else if (dragOffsetY < 0 && index > 0) {
+            val prevHeight = blockHeights[cardOrder[index - 1]] ?: 0
+            if (prevHeight > 0 && -dragOffsetY > prevHeight / 2f) {
+                viewModel.moveCard(index, index - 1)
+                dragOffsetY += prevHeight
+            }
+        }
+    }
     val deleteConfirm = rememberDeleteConfirm()
     val deleteShoppingText = stringResource(R.string.delete_shopping_confirm)
     val clearBoughtText = stringResource(R.string.clear_bought_confirm)
@@ -167,11 +201,27 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-                IconButton(onClick = onSettings) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = stringResource(R.string.settings)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        onClick = {
+                            layoutEditing = !layoutEditing
+                            // 退出编辑模式时清掉拖动中间态，避免残留位移影响渲染
+                            draggingCard = null
+                            dragOffsetY = 0f
+                        }
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (layoutEditing) R.string.home_layout_done else R.string.home_layout_edit
+                            )
+                        )
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings)
+                        )
+                    }
                 }
             }
         }
@@ -185,179 +235,210 @@ fun HomeScreen(
             )
         }
 
-        item {
-            LifeIndexCard(
-                score = uiState.lifeIndex,
-                desc = stringResource(R.string.life_index_desc),
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                StatCard(
-                    label = stringResource(R.string.month_expense),
-                    value = "¥${formatMoney(uiState.monthExpense)}",
-                    hint = stringResource(R.string.month_expense_hint),
-                    background = CardRed,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenAccounting
-                )
-                StatCard(
-                    label = stringResource(R.string.latest_weight),
-                    value = uiState.latestWeight?.let { "${it.weight}kg" } ?: "--",
-                    hint = stringResource(R.string.latest_weight_hint),
-                    background = CardGreen,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenHealth
-                )
-                StatCard(
-                    label = stringResource(R.string.today_todo),
-                    value = "${uiState.todayTodoCount}件",
-                    hint = stringResource(R.string.today_todo_hint),
-                    background = CardAmber,
-                    modifier = Modifier.weight(1f),
-                    onClick = onOpenSchedule
+        // ---------------- 可排序区块：顺序由 HomeCard 顺序决定（默认顺序见 HomeCard.DEFAULT_ORDER） ----------------
+        if (layoutEditing) {
+            item {
+                Text(
+                    text = stringResource(R.string.home_layout_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // ---------------- 今日待办（单条日程 + 待办清单） ----------------
-        item {
-            SectionHeader(
-                title = stringResource(R.string.today_todo),
-                action = stringResource(R.string.all),
-                onAction = onOpenSchedule
-            )
-            if (uiState.todayTodoItems.isEmpty()) {
-                EmptyState(
-                    title = stringResource(R.string.today_todo_empty_title),
-                    description = stringResource(R.string.today_todo_empty_desc),
-                    modifier = Modifier.padding(16.dp)
+        items(cardOrder, key = { it.id }) { card ->
+            HomeBlock(
+                card = card,
+                editing = layoutEditing,
+                dragging = draggingCard == card,
+                dragOffsetY = if (draggingCard == card) dragOffsetY else 0f,
+                onHeightMeasured = { blockHeights[card] = it },
+                onDragStart = {
+                    draggingCard = card
+                    dragOffsetY = 0f
+                },
+                onDragDelta = { delta -> onBlockDrag(card, delta) },
+                onDragEnd = {
+                    draggingCard = null
+                    dragOffsetY = 0f
+                }
+            ) {
+                when (card) {
+                    HomeCard.LIFE_INDEX -> {
+                LifeIndexCard(
+                    score = uiState.lifeIndex,
+                    desc = stringResource(R.string.life_index_desc),
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
-            } else {
-                Column(
+                Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    HomeCard.STATS -> {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    uiState.todayTodoItems.forEach { item ->
-                        when (item) {
-                            is ScheduleListItem.Single -> HomeTodoRow(
-                                item = item.schedule,
-                                onClick = onOpenSchedule
-                            )
+                    StatCard(
+                        label = stringResource(R.string.month_expense),
+                        value = "¥${formatMoney(uiState.monthExpense)}",
+                        hint = stringResource(R.string.month_expense_hint),
+                        background = CardRed,
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenAccounting
+                    )
+                    StatCard(
+                        label = stringResource(R.string.latest_weight),
+                        value = uiState.latestWeight?.let { "${it.weight}kg" } ?: "--",
+                        hint = stringResource(R.string.latest_weight_hint),
+                        background = CardGreen,
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenHealth
+                    )
+                    StatCard(
+                        label = stringResource(R.string.today_todo),
+                        value = "${uiState.todayTodoCount}件",
+                        hint = stringResource(R.string.today_todo_hint),
+                        background = CardAmber,
+                        modifier = Modifier.weight(1f),
+                        onClick = onOpenSchedule
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                    }
 
-                            is ScheduleListItem.Group -> HomeTodoGroupCard(
-                                group = item,
-                                onClick = onOpenSchedule
+                    HomeCard.TODAY_TODO -> {
+            // ---------------- 今日待办（单条日程 + 待办清单） ----------------
+                SectionHeader(
+                    title = stringResource(R.string.today_todo),
+                    action = stringResource(R.string.all),
+                    onAction = onOpenSchedule
+                )
+                if (uiState.todayTodoItems.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.today_todo_empty_title),
+                        description = stringResource(R.string.today_todo_empty_desc),
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        uiState.todayTodoItems.forEach { item ->
+                            when (item) {
+                                is ScheduleListItem.Single -> HomeTodoRow(
+                                    item = item.schedule,
+                                    onClick = onOpenSchedule
+                                )
+
+                                is ScheduleListItem.Group -> HomeTodoGroupCard(
+                                    group = item,
+                                    onClick = onOpenSchedule
+                                )
+                            }
+                        }
+                    }
+                }
+                    }
+
+                    HomeCard.SHOPPING -> {
+            // ---------------- 购买物品（待买 / 已买） ----------------
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionHeader(
+                    title = stringResource(R.string.shopping_list),
+                    action = stringResource(R.string.add_shopping_item),
+                    onAction = { showShoppingDialog = true }
+                )
+                ShoppingCard(
+                    toBuy = uiState.shoppingToBuy,
+                    bought = uiState.shoppingBought,
+                    showBought = shoppingTabBought,
+                    onTabChange = { shoppingTabBought = it },
+                    onToggle = viewModel::toggleShoppingItem,
+                    onDelete = { id ->
+                        deleteConfirm.request(deleteShoppingText) {
+                            viewModel.deleteShoppingItem(id)
+                        }
+                    },
+                    onClearBought = {
+                        deleteConfirm.request(clearBoughtText) {
+                            viewModel.clearBoughtItems()
+                        }
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                    }
+
+                    HomeCard.MEDIA -> {
+            // ---------------- 书影音（最近作品） ----------------
+                Spacer(modifier = Modifier.height(16.dp))
+                SectionHeader(
+                    title = stringResource(R.string.media_collection),
+                    action = stringResource(R.string.all),
+                    onAction = onOpenMedia
+                )
+                if (uiState.recentMedia.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.media_empty_title),
+                        description = stringResource(R.string.media_empty_desc),
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .height((if (uiState.recentMedia.size > 2) 300 else 144).dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        userScrollEnabled = false
+                    ) {
+                        items(uiState.recentMedia, key = { it.id }) { media ->
+                            HomeMediaCard(
+                                media = media,
+                                onPreview = { if (!media.coverUri.isNullOrBlank()) previewMedia = media },
+                                onOpenMedia = onOpenMedia
                             )
                         }
                     }
                 }
-            }
-        }
-
-        // ---------------- 购买物品（待买 / 已买） ----------------
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionHeader(
-                title = stringResource(R.string.shopping_list),
-                action = stringResource(R.string.add_shopping_item),
-                onAction = { showShoppingDialog = true }
-            )
-            ShoppingCard(
-                toBuy = uiState.shoppingToBuy,
-                bought = uiState.shoppingBought,
-                showBought = shoppingTabBought,
-                onTabChange = { shoppingTabBought = it },
-                onToggle = viewModel::toggleShoppingItem,
-                onDelete = { id ->
-                    deleteConfirm.request(deleteShoppingText) {
-                        viewModel.deleteShoppingItem(id)
                     }
-                },
-                onClearBought = {
-                    deleteConfirm.request(clearBoughtText) {
-                        viewModel.clearBoughtItems()
-                    }
-                },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-        }
 
-        // ---------------- 书影音（最近作品） ----------------
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionHeader(
-                title = stringResource(R.string.media_collection),
-                action = stringResource(R.string.all),
-                onAction = onOpenMedia
-            )
-            if (uiState.recentMedia.isEmpty()) {
-                EmptyState(
-                    title = stringResource(R.string.media_empty_title),
-                    description = stringResource(R.string.media_empty_desc),
-                    modifier = Modifier.padding(16.dp)
+                    HomeCard.RECENT_TRACE -> {
+                SectionHeader(
+                    title = stringResource(R.string.recent_trace),
+                    action = stringResource(R.string.all),
+                    onAction = onOpenAccounting
                 )
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height((if (uiState.recentMedia.size > 2) 300 else 144).dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    userScrollEnabled = false
-                ) {
-                    items(uiState.recentMedia, key = { it.id }) { media ->
-                        HomeMediaCard(
-                            media = media,
-                            onPreview = { if (!media.coverUri.isNullOrBlank()) previewMedia = media },
-                            onOpenMedia = onOpenMedia
+                if (uiState.recentRecords.isEmpty()) {
+                    EmptyState(
+                        title = stringResource(R.string.empty_state_title),
+                        description = stringResource(R.string.empty_state_desc),
+                        modifier = Modifier.padding(16.dp)
+                    )
+                } else {
+                    uiState.recentRecords.forEach { record: AccountRecord ->
+                        AccountListItem(
+                            record = record,
+                            onClick = { editingRecord = record },
+                            onLongClick = { editingRecord = record },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                         )
                     }
                 }
-            }
-        }
+                    }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-            SectionHeader(
-                title = stringResource(R.string.recent_trace),
-                action = stringResource(R.string.all),
-                onAction = onOpenAccounting
-            )
-            if (uiState.recentRecords.isEmpty()) {
-                EmptyState(
-                    title = stringResource(R.string.empty_state_title),
-                    description = stringResource(R.string.empty_state_desc),
-                    modifier = Modifier.padding(16.dp)
-                )
-            } else {
-                uiState.recentRecords.forEach { record: AccountRecord ->
-                    AccountListItem(
-                        record = record,
-                        onClick = { editingRecord = record },
-                        onLongClick = { editingRecord = record },
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                    )
+                    HomeCard.QUOTE -> {
+                QuoteCard(quote = uiState.quote, author = uiState.quoteAuthor)
+                    }
                 }
             }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
-            QuoteCard(quote = uiState.quote, author = uiState.quoteAuthor)
         }
         }
 

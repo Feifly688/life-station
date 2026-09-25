@@ -2,6 +2,7 @@ package com.feiqi.data.repository
 
 import android.content.Context
 import com.feiqi.data.datastore.PreferencesDataStore
+import com.feiqi.data.model.HomeCard
 import com.feiqi.data.model.ShoppingItem
 import com.feiqi.data.model.UserProfile
 import com.feiqi.data.model.WeightRecord
@@ -19,6 +20,18 @@ class PreferencesRepository(context: Context) {
     private val dataStore = PreferencesDataStore(context)
     private val gson = Gson()
     private val tag = "PreferencesRepository"
+
+    /**
+     * 首页卡片排列顺序。存储的是逗号分隔的 id；解析时统一走 [HomeCard.normalize]，
+     * 因此「新增了卡片种类」「存储串损坏」都不会丢卡片，只会把缺失项补到末尾。
+     */
+    val homeCardOrder: Flow<List<HomeCard>> = dataStore.homeCardOrder.map { raw ->
+        HomeCard.normalize(raw.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+    }
+
+    suspend fun setHomeCardOrder(order: List<HomeCard>) {
+        dataStore.setHomeCardOrder(order.joinToString(",") { it.id })
+    }
 
     val monthlyBudget: Flow<Double> = dataStore.monthlyBudget
 
