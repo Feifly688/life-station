@@ -148,60 +148,92 @@ fun HomeScreen(
     var listBottomInRoot by remember { mutableStateOf(0f) }
     // 每帧滚动像素（带符号）：>0 向下滚、<0 向上滚；数值由指针贴近边缘的程度决定
     var autoScrollStep by remember { mutableStateOf(0f) }
+    // 最近的指针绝对 Y：手指停在边缘不动时没有新的拖动事件，滚动循环要靠它复算
+    var dragPointerRootY by remember { mutableStateOf(0f) }
+
+    /**
+     * 拖拽结算：**换位判定 + 边缘自动滚动**。指针移动时调用，**自动滚动的每一帧之后也会调用**。
+     *
+     * 为什么必须抽出来：手指停在屏幕边缘不动时不会再有拖动事件，若只在 onDrag 里判定，
+     * 位移会单方面累加（滚动补偿）而卡片永远不落位 → 卡片被推出可视区、界面只剩空白。
+     */
+    fun settleDrag(card: HomeCard, pointerRootY: Float) {
+        // ① 换位判定：用 while 连续跨越，高速拖动时一帧可能跨过多个区块
+        while (true) {
+            val index = cardOrder.indexOf(card)
+            if (index < 0) return
+            val nextHeight =
+                if (dragOffsetY > 0 && index < cardOrder.lastIndex) blockHeights[cardOrder[index + 1]] ?: 0 else 0
+            val prevHeight =
+                if (dragOffsetY < 0 && index > 0) blockHeights[cardOrder[index - 1]] ?: 0 else 0
+            when {
+                nextHeight > 0 && dragOffsetY > nextHeight / 2f -> {
+                    viewModel.moveCard(index, index + 1)
+                    dragOffsetY -= nextHeight
+                }
+
+                prevHeight > 0 && -dragOffsetY > prevHeight / 2f -> {
+                    viewModel.moveCard(index, index - 1)
+                    dragOffsetY += prevHeight
+                }
+
+                else -> break
+            }
+        }
+
+        // ② 位移钳制（保险）：正常每跨过一块就会扣掉一块高度，位移天然有界；
+        //    这里再兜一层，任何异常都不会把卡片推出屏幕（即"卡片丢失/空白"）。
+        val maxHeight = blockHeights.values.maxOrNull() ?: 0
+        if (maxHeight > 0) {
+            dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, maxHeight.toFloat())
+        }
+
+        // ③ 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）。
+        //    已在队首/队尾且仍要往外拖时**停止滚动**：此时没有可交换的位置，
+        //    继续滚只会让卡片脱离自己的槽位。
+        val index = cardOrder.indexOf(card)
+        val canScrollUp = index > 0
+        val canScrollDown = index < cardOrder.lastIndex
+        autoScrollStep = HomeDragRules.autoScrollStep(
+            pointerRootY = pointerRootY,
+            listTop = listTopInRoot,
+            listBottom = listBottomInRoot,
+            zone = with(density) { HOME_EDGE_SCROLL_ZONE.toPx() },
+            minStep = with(density) { HOME_EDGE_SCROLL_MIN.toPx() },
+            maxStep = with(density) { HOME_EDGE_SCROLL_MAX.toPx() },
+            canScrollUp = canScrollUp,
+            canScrollDown = canScrollDown
+        )
+    }
 
     // 拖动期间逐帧滚动；滚动量补偿进拖拽位移，被拖卡片才能继续跟手（不脱手、不跳变）
     LaunchedEffect(draggingCard) {
         while (draggingCard != null) {
             val step = autoScrollStep
-            if (step != 0f) {
+            val card = draggingCard
+            if (step != 0f && card != null) {
                 val consumed = listState.scrollBy(step)
-                if (consumed != 0f) dragOffsetY += consumed
+                if (consumed != 0f) {
+                    // 列表滚了，位移要跟着补，卡片才不脱手
+                    dragOffsetY += consumed
+                    // 关键修复：滚动后立刻复算「是否该换位」。
+                    // 手指停在边缘不动时没有拖动事件，若不复算，位移会一直累加而卡片永不落位，
+                    // 表现为卡片被推出可视区、只剩空白。
+                    settleDrag(card, dragPointerRootY)
+                }
             }
             withFrameNanos { }
         }
         autoScrollStep = 0f
     }
 
-    /**
-     * 拖动位移处理：累计位移越过相邻区块**一半高度**即与它交换位置（边拖边换，实时重排），
-     * 再从位移里减去被越过区块的高度，保证剩余位移继续跟手、不跳变。
-     * 每次交换都立刻持久化（拖动中即保存），松手时顺序已是最终顺序。
-     */
+    /** 拖动位移入口：累加位移并记住指针位置，随后交给 [settleDrag] 做换位与自动滚动判定。 */
     fun onBlockDrag(card: HomeCard, deltaY: Float, pointerRootY: Float) {
         dragOffsetY += deltaY
-        val index = cardOrder.indexOf(card)
-        if (index < 0) return
-        if (dragOffsetY > 0 && index < cardOrder.lastIndex) {
-            val nextHeight = blockHeights[cardOrder[index + 1]] ?: 0
-            if (nextHeight > 0 && dragOffsetY > nextHeight / 2f) {
-                viewModel.moveCard(index, index + 1)
-                dragOffsetY -= nextHeight
-            }
-        } else if (dragOffsetY < 0 && index > 0) {
-            val prevHeight = blockHeights[cardOrder[index - 1]] ?: 0
-            if (prevHeight > 0 && -dragOffsetY > prevHeight / 2f) {
-                viewModel.moveCard(index, index - 1)
-                dragOffsetY += prevHeight
-            }
-        }
-        // 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）
-        val zone = with(density) { HOME_EDGE_SCROLL_ZONE.toPx() }
-        val minStep = with(density) { HOME_EDGE_SCROLL_MIN.toPx() }
-        val maxStep = with(density) { HOME_EDGE_SCROLL_MAX.toPx() }
-        autoScrollStep = when {
-            pointerRootY < listTopInRoot + zone -> {
-                val ratio = ((listTopInRoot + zone - pointerRootY) / zone).coerceIn(0f, 1f)
-                -(minStep + ratio * (maxStep - minStep))
-            }
-
-            pointerRootY > listBottomInRoot - zone -> {
-                val ratio = ((pointerRootY - (listBottomInRoot - zone)) / zone).coerceIn(0f, 1f)
-                minStep + ratio * (maxStep - minStep)
-            }
-
-            else -> 0f
-        }
+        dragPointerRootY = pointerRootY
+        settleDrag(card, pointerRootY)
     }
+
     val deleteConfirm = rememberDeleteConfirm()
     val deleteShoppingText = stringResource(R.string.delete_shopping_confirm)
     val clearBoughtText = stringResource(R.string.clear_bought_confirm)
@@ -321,8 +353,11 @@ fun HomeScreen(
                 },
                 onDragDelta = { delta, pointerY -> onBlockDrag(card, delta, pointerY) },
                 onDragEnd = {
+                    // 松手即归位：清掉拖动中间态，卡片落在最终顺序对应的槽位上
                     draggingCard = null
                     dragOffsetY = 0f
+                    autoScrollStep = 0f
+                    dragPointerRootY = 0f
                 }
             ) {
                 when (card) {
