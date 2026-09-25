@@ -170,8 +170,9 @@ fun ScheduleScreen(
     // 这样初始空集合天然等于「全部展开」：进入待办页第一帧就是展开态，
     // 不会出现「先渲染成收起、再播放展开动画」的肉眼可见过程。
     var collapsedListIds by remember { mutableStateOf(setOf<String>()) }
-    // 已完成列表默认展开（用户可点击标题折叠）。
-    var completedExpanded by remember { mutableStateOf(true) }
+    // 「已完成」区块默认**收起**：进入日程页只看待办区，不把已完成内容铺满屏幕；
+    // 点区块标题（已完成 (N)）可随时展开查看，展开状态只在本页生命周期内保持。
+    var completedExpanded by remember { mutableStateOf(false) }
     var editingGroup by remember { mutableStateOf<ScheduleListItem.Group?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
