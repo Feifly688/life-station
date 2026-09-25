@@ -170,9 +170,11 @@ fun ScheduleScreen(
     // 这样初始空集合天然等于「全部展开」：进入待办页第一帧就是展开态，
     // 不会出现「先渲染成收起、再播放展开动画」的肉眼可见过程。
     var collapsedListIds by remember { mutableStateOf(setOf<String>()) }
-    // 「已完成」区块默认**收起**：进入日程页只看待办区，不把已完成内容铺满屏幕；
-    // 点区块标题（已完成 (N)）可随时展开查看，展开状态只在本页生命周期内保持。
-    var completedExpanded by remember { mutableStateOf(false) }
+    // 已完成区里的清单卡片采用**相反**的默认值：默认收起，只记录「被用户展开」的清单。
+    // 这样「已完成」区块本身展开（一眼看到完成了哪些清单），但不会把每张清单的条目全部铺开。
+    var expandedDoneListIds by remember { mutableStateOf(setOf<String>()) }
+    // 「已完成」区块默认展开（点标题可收起）。
+    var completedExpanded by remember { mutableStateOf(true) }
     var editingGroup by remember { mutableStateOf<ScheduleListItem.Group?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
@@ -369,13 +371,14 @@ fun ScheduleScreen(
                         items(completedItems, key = { "done-${itemKey(it)}" }) { item ->
                             ScheduleListItemCard(
                                 item = item,
-                                expanded = item is ScheduleListItem.Group && item.listId !in collapsedListIds,
+                                // 已完成区：清单卡片默认收起，点标题才展开。
+                                expanded = item is ScheduleListItem.Group && item.listId in expandedDoneListIds,
                                 selectionMode = selectionMode,
                                 selected = isSelected(item),
                                 isCompleted = true,
                                 onToggleGroup = { listId ->
                                     if (!selectionMode) {
-                                        collapsedListIds = collapsedListIds.xor(listId)
+                                        expandedDoneListIds = expandedDoneListIds.xor(listId)
                                     }
                                 },
                                 onToggleItem = { schedule ->
