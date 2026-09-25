@@ -77,10 +77,14 @@ import com.feiqi.data.model.ShoppingItem
 import com.feiqi.ui.components.AccountListItem
 import com.feiqi.ui.components.DeleteConfirmHost
 import com.feiqi.ui.components.EmptyState
+import com.feiqi.ui.components.GlassSurface
 import com.feiqi.ui.components.RecordFormDialog
 import com.feiqi.ui.components.rememberDeleteConfirm
 import com.feiqi.ui.media.CoverPreviewDialog
 import com.feiqi.ui.theme.CardAmber
+import com.feiqi.ui.theme.FeiQiSpacing
+import com.feiqi.ui.theme.FeiQiRadius
+import com.feiqi.ui.theme.GlassStrength
 import com.feiqi.ui.theme.CardGreen
 import com.feiqi.ui.theme.CardRed
 import com.feiqi.ui.theme.ExpenseRed
@@ -90,7 +94,6 @@ import com.feiqi.ui.theme.OnSurfaceVariant
 import com.feiqi.ui.theme.OutlineVariant
 import com.feiqi.ui.theme.Primary
 import com.feiqi.ui.theme.PrimaryContainer
-import com.feiqi.ui.theme.QuoteSurface
 import com.feiqi.ui.theme.SurfaceVariant
 import com.feiqi.ui.theme.Tertiary
 import java.text.DecimalFormat
@@ -587,17 +590,16 @@ private fun StatCard(
 
 @Composable
 private fun QuoteCard(quote: String, author: String? = null, modifier: Modifier = Modifier) {
-    Box(
+    // 液态玻璃海报卡（DESIGN.md §4）：轻档半透明 + 高光边 + 暖色阴影，透出页面底色更通透
+    GlassSurface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(16.dp))
-            // 填充贴近页面背景，仅靠一道极淡的描边界定卡片，视觉过渡更自然（不再用整块色底）。
-            .background(QuoteSurface)
-            .border(1.dp, OutlineVariant, RoundedCornerShape(16.dp))
-            .padding(20.dp)
+            .padding(horizontal = FeiQiSpacing.lg),
+        shape = RoundedCornerShape(FeiQiRadius.lg),
+        strength = GlassStrength.Thin,
+        elevated = false
     ) {
-        Column {
+        Column(modifier = Modifier.padding(FeiQiSpacing.lg + FeiQiSpacing.xs)) {
             Text(
                 text = quote,
                 style = MaterialTheme.typography.bodyLarge,

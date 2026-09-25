@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.feiqi.data.model.HomeCard
+import com.feiqi.ui.theme.GlassStrength
+import com.feiqi.ui.components.glassEdge
 import kotlin.math.roundToInt
 
 /**
@@ -67,6 +69,8 @@ internal fun HomeBlock(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .shadow(if (dragging) 10.dp else 0.dp, shape, clip = false)
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), shape)
+                        // 与弹窗/导航栏统一的高光边语言（DESIGN.md §4）
+                        .glassEdge(shape, GlassStrength.Regular)
                 } else {
                     Modifier
                 }

@@ -59,6 +59,8 @@ fun FeiQiTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
+        // 形状统一走设计令牌（DESIGN.md §3）：卡片/弹窗/按钮自动获得一致圆角
+        shapes = FeiQiShapes,
         typography = Typography,
         content = content
     )

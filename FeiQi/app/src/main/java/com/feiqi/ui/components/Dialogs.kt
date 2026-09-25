@@ -1,6 +1,7 @@
 package com.feiqi.ui.components
 
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import com.feiqi.R
+import com.feiqi.ui.theme.FeiQiRadius
+import com.feiqi.ui.theme.GlassStrength
 
 @Composable
 fun ConfirmDialog(
@@ -26,8 +29,13 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    // 液态玻璃弹窗（DESIGN.md §4）：厚档半透明 + xl 圆角 + 高光边；透出的底色是被压暗的页面内容
+    val shape = RoundedCornerShape(FeiQiRadius.xl)
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
+        shape = shape,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
         title = { Text(title) },
         text = { Text(text, color = MaterialTheme.colorScheme.onSurface) },
         confirmButton = {
@@ -53,8 +61,12 @@ fun TextEditDialog(
 ) {
     var text by remember { mutableStateOf(initialText) }
 
+    val shape = RoundedCornerShape(FeiQiRadius.xl)
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
+        shape = shape,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
         title = { Text(title) },
         text = {
             OutlinedTextField(
@@ -90,8 +102,12 @@ fun InfoDialog(
     text: String,
     onDismiss: () -> Unit
 ) {
+    val shape = RoundedCornerShape(FeiQiRadius.xl)
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.glassEdge(shape, GlassStrength.Thick),
+        shape = shape,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = GlassStrength.Thick.fillAlpha),
         title = { Text(title) },
         text = { Text(text, color = MaterialTheme.colorScheme.onSurface) },
         confirmButton = {
