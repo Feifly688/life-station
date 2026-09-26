@@ -54,6 +54,22 @@ data class Schedule(
         if (date < today) return true
         return date == today && time != null && now > time
     }
+
+    /**
+     * 清单条目的「过期」口径：**过了截止日（date < today）仍未完成**即视为已过期。
+     *
+     * 与 [isOverdue] 的区别：**不看是否设了提醒、也不看当天具体时刻** ——
+     * 待办清单的"打卡"语义是"当天结束前勾掉"，所以只看日期是否已跨过。
+     */
+    fun isDeadlineOverdue(today: LocalDate = LocalDate.now()): Boolean = date < today
+
+    /**
+     * 统一的「是否应归入已完成区并标『已过期』」判定（仅对**未完成**条目调用）：
+     * - 单条日程（listId == null）：沿用 [isOverdue]（需提醒 + 按时判定）；
+     * - 清单条目（listId != null）：用 [isDeadlineOverdue]（只看到期日）。
+     */
+    fun isExpired(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean =
+        if (listId == null) isOverdue(today, now) else isDeadlineOverdue(today)
 }
 
 data class ScheduleUiState(

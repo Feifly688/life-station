@@ -6,6 +6,7 @@ import com.feiqi.data.model.Recurrence
 import com.feiqi.data.model.Schedule
 import com.feiqi.data.model.ScheduleFilter
 import com.feiqi.data.model.ScheduleListItem
+import com.feiqi.data.model.ScheduleListRules
 import com.feiqi.data.model.ScheduleUiState
 import com.feiqi.data.repository.ScheduleRepository
 import com.feiqi.utils.DateUtils
@@ -177,7 +178,7 @@ class ScheduleViewModel(
                 completed = true,
                 completedDate = today,
                 // 完成这一刻应完成时刻已过 → 快照保留「已过期」标签
-                completedLate = group.any { it.isOverdue(today) },
+                completedLate = group.any { it.isExpired(today) },
                 date = today,
                 recurrence = Recurrence.NONE, // 快照不再循环
                 lastResetDate = null,
@@ -224,7 +225,7 @@ class ScheduleViewModel(
             completed = markCompleted,
             completedDate = if (markCompleted) today else null,
             // 完成时若应完成时刻已过 → 记为「过期后补完成」；取消完成则清掉标记。
-            completedLate = if (markCompleted) schedule.isOverdue(today) else false,
+            completedLate = if (markCompleted) schedule.isExpired(today) else false,
             // 完成记录不再循环（由副本负责继续），与「清单完成快照」的口径保持一致。
             recurrence = if (markCompleted && repeatingSingle) Recurrence.NONE else schedule.recurrence
         )
@@ -324,7 +325,7 @@ class ScheduleViewModel(
                         it.copy(
                             completed = completed,
                             completedDate = if (completed) today else null,
-                            completedLate = if (completed) it.isOverdue(today) else false
+                            completedLate = if (completed) it.isExpired(today) else false
                         )
                     }
                     repository.updateBatch(updated)
@@ -607,31 +608,8 @@ class ScheduleViewModel(
     /** 当前是否具备精确闹钟授权（供 UI 决定是否引导用户开启）。 */
     fun canScheduleExact(): Boolean = reminderScheduler.canScheduleExact()
 
-    private fun buildListItems(all: List<Schedule>): List<ScheduleListItem> {
-        val (withList, singles) = all.partition { it.listId != null }
-        val groups = withList.groupBy { it.listId!! }
-            .map { (listId, items) ->
-                ScheduleListItem.Group(
-                    listId = listId,
-                    title = items.firstOrNull { it.listTitle.isNotBlank() }?.listTitle
-                        ?: items.first().title,
-                    items = items.sortedBy { it.itemOrder },
-                    recurrence = items.firstOrNull { it.recurrence.isRepeating }?.recurrence
-                        ?: Recurrence.NONE
-                )
-            }
-        val singleItems = singles.map { ScheduleListItem.Single(it) }
-        // 排序：未完成的在前，按日期；已完成的在后。
-        val sortedGroups = groups.sortedWith(
-            compareByDescending<ScheduleListItem.Group> { !it.allCompleted }
-                .thenBy { it.items.firstOrNull()?.date ?: LocalDate.MAX }
-        )
-        val sortedSingles = singleItems.sortedWith(
-            compareByDescending<ScheduleListItem.Single> { !it.schedule.completed }
-                .thenBy { it.schedule.date }
-        )
-        return sortedSingles + sortedGroups
-    }
+    private fun buildListItems(all: List<Schedule>): List<ScheduleListItem> =
+        ScheduleListRules.buildItems(all, DateUtils.today())
 }
 
 /** 清单编辑时单条待办的传输对象。 */

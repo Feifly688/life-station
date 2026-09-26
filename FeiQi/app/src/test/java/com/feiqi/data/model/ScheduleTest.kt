@@ -90,4 +90,32 @@ class ScheduleTest {
         val late = schedule(today.minusDays(1), LocalTime.of(9, 0), completed = true, completedLate = true)
         assertTrue(late.completedLate)
     }
+
+    @Test
+    fun deadlineOverdue_isDateOnly_ignoresReminderAndTime() {
+        val t = LocalDate.of(2026, 9, 25)
+        // 清单条目：过了截止日即过期，与是否设提醒 / 是否有时间无关
+        assertTrue(Schedule(title = "项", date = t.minusDays(1), listId = "L").isDeadlineOverdue(t))
+        assertTrue(
+            Schedule(title = "项", date = t.minusDays(1), time = LocalTime.of(9, 0), reminder = true, listId = "L")
+                .isDeadlineOverdue(t)
+        )
+        assertFalse(Schedule(title = "项", date = t, listId = "L").isDeadlineOverdue(t))
+        assertFalse(Schedule(title = "项", date = t.plusDays(1), listId = "L").isDeadlineOverdue(t))
+    }
+
+    @Test
+    fun isExpired_dispatchesByItemType() {
+        val t = LocalDate.of(2026, 9, 25)
+        // 单条：无提醒的过去日期 → 不过期（沿用既有口径）
+        val single = Schedule(title = "单", date = t.minusDays(1), time = null, reminder = false, listId = null)
+        assertFalse(single.isExpired(t))
+        // 单条：有提醒的过去日期 → 过期
+        assertTrue(single.copy(reminder = true).isExpired(t))
+        // 清单条目：无提醒的过去日期 → 过期（按截止日）
+        val item = Schedule(title = "项", date = t.minusDays(1), time = null, reminder = false, listId = "L1")
+        assertTrue(item.isExpired(t))
+        // 清单条目：今天 → 不过期
+        assertFalse(item.copy(date = t).isExpired(t))
+    }
 }

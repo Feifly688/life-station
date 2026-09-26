@@ -112,4 +112,37 @@ class ScheduleListRulesTest {
         assertEquals(listOf(1L, 3L), active.map { (it as ScheduleListItem.Single).schedule.id })
         assertEquals(listOf(2L, 4L), completed.map { (it as ScheduleListItem.Single).schedule.id })
     }
+
+    @Test
+    fun buildItems_liftsOverdueListItemToSingle() {
+        val overdue = Schedule(title = "过期项", date = today.minusDays(1), listId = "L", listTitle = "清单", itemOrder = 0)
+        val active = Schedule(title = "进行中", date = today, listId = "L", listTitle = "清单", itemOrder = 1)
+        val done = Schedule(title = "已做完", date = today, completed = true, completedDate = today, listId = "L", listTitle = "清单", itemOrder = 2)
+        val items = ScheduleListRules.buildItems(listOf(overdue, active, done), today)
+
+        // 过期项被拆成单条（从而进已完成区）
+        val lifted = items.filterIsInstance<ScheduleListItem.Single>().first { it.schedule.listId == "L" }
+        assertEquals("过期项", lifted.schedule.title)
+        // 清单组只剩 2 条（进行中 + 已做完）
+        val group = items.filterIsInstance<ScheduleListItem.Group>().first { it.listId == "L" }
+        assertEquals(listOf("进行中", "已做完"), group.items.map { it.title })
+        assertEquals(2, group.total)
+    }
+
+    @Test
+    fun buildItems_allOverdueList_producesNoGroup() {
+        val a = Schedule(title = "A", date = today.minusDays(1), listId = "L", listTitle = "清单")
+        val b = Schedule(title = "B", date = today.minusDays(2), listId = "L", listTitle = "清单")
+        val items = ScheduleListRules.buildItems(listOf(a, b), today)
+        assertTrue(items.none { it is ScheduleListItem.Group })
+        assertEquals(2, items.filterIsInstance<ScheduleListItem.Single>().size)
+    }
+
+    @Test
+    fun buildItems_listDatedToday_isNotLifted() {
+        val a = Schedule(title = "A", date = today, listId = "L", listTitle = "清单")
+        val items = ScheduleListRules.buildItems(listOf(a), today)
+        assertEquals(1, items.filterIsInstance<ScheduleListItem.Group>().size)
+        assertEquals(0, items.filterIsInstance<ScheduleListItem.Single>().size)
+    }
 }

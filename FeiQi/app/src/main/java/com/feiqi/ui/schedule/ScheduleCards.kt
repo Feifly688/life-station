@@ -175,14 +175,14 @@ internal fun SingleScheduleCard(
     modifier: Modifier = Modifier
 ) {
     val today = DateUtils.today()
-    // 未完成 → 过期状态实时推导（用于红色底与标签）；已完成 → 只看「过期后补完成」标记，
-    // 因此补打卡不会抹掉「已过期」标签，按时完成也不会在事后被误标过期。
-    val isOverdue = schedule.isOverdue(today) && !schedule.completed
-    val showOverdue = if (schedule.completed) schedule.completedLate else isOverdue
+    // 未完成 → 统一过期口径（单条=按提醒、清单条目=按截止日），用于红色底与「已过期」标签；
+    // 已完成 → 只看「过期后补完成」标记：补打卡不会抹掉标签，按时完成也不会被误标过期。
+    val uncompletedExpired = !schedule.completed && schedule.isExpired(today)
+    val showOverdue = if (schedule.completed) schedule.completedLate else uncompletedExpired
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (isOverdue && !selectionMode) CardRed else MaterialTheme.colorScheme.surface
+            containerColor = if (uncompletedExpired && !selectionMode) CardRed else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(16.dp)
@@ -282,7 +282,7 @@ internal fun ScheduleGroupCard(
 ) {
     val today = DateUtils.today()
     val hasOverdue = group.items.any {
-        if (it.completed) it.completedLate else it.isOverdue(today)
+        if (it.completed) it.completedLate else it.isExpired(today)
     }
     val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "arrow")
 
