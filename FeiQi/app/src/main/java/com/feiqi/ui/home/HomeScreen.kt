@@ -1,8 +1,8 @@
 package com.feiqi.ui.home
 
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -66,10 +66,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -120,8 +122,8 @@ private val HOME_EDGE_SCROLL_ZONE = 96.dp
 private val HOME_EDGE_SCROLL_MIN = 2.dp
 private val HOME_EDGE_SCROLL_MAX = 16.dp
 
-/** 松手归位动画时长（ms）：太快像瞬移，太慢显得拖沓。 */
-private const val HOME_SNAP_DURATION_MS = 220
+/** 拖动中的磁性吸附死区（dp）：位移小于它时卡片被"吸"回槽位，靠近槽位更有"格子感"。 */
+private val HOME_SNAP_ZONE = 8.dp
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -159,6 +161,8 @@ fun HomeScreen(
     // ---------------- 拖拽辅助：列表状态 / 可视区边界 / 边缘自动滚动 ----------------
     val listState = rememberLazyListState()
     val density = LocalDensity.current
+    // 归位/换位时给一个轻微触感，强化"吸附"的体感
+    val haptic = LocalHapticFeedback.current
     var listTopInRoot by remember { mutableStateOf(0f) }
     var listBottomInRoot by remember { mutableStateOf(0f) }
     // 每帧滚动像素（带符号）：>0 向下滚、<0 向上滚；数值由指针贴近边缘的程度决定
@@ -196,7 +200,11 @@ fun HomeScreen(
             }
         }
 
-        // ② 位移钳制（保险）：正常每跨过一块就会扣掉一块高度，位移天然有界；
+        // ② 磁性吸附：位移很小时把卡片"吸"回槽位 —— 靠近槽位更跟手、更像桌面图标/看板
+        val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
+        if (kotlin.math.abs(dragOffsetY) < snapZone) dragOffsetY = 0f
+
+        // ③ 位移钳制（保险）：正常每跨过一块就会扣掉一块高度，位移天然有界；
         //    这里再兜一层，任何异常都不会把卡片推出屏幕（即"卡片丢失/空白"）。
         val maxHeight = blockHeights.values.maxOrNull() ?: 0
         if (maxHeight > 0) {
@@ -226,10 +234,15 @@ fun HomeScreen(
         val card = settlingCard ?: return@LaunchedEffect
         val from = dragOffsetY
         if (from != 0f) {
+            // 弹簧回弹：比匀速 tween 更有"咔哒"落位感
             Animatable(from).animateTo(
                 targetValue = 0f,
-                animationSpec = tween(HOME_SNAP_DURATION_MS, easing = FastOutSlowInEasing)
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
             ) { dragOffsetY = value }
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
         dragOffsetY = 0f
         settlingCard = null
