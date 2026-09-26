@@ -6,6 +6,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -125,7 +128,7 @@ private val HOME_EDGE_SCROLL_MAX = 16.dp
 /** 拖动中的磁性吸附死区（dp）：位移小于它时卡片被"吸"回槽位，靠近槽位更有"格子感"。 */
 private val HOME_SNAP_ZONE = 8.dp
 
-@OptIn(ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterialApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -149,11 +152,6 @@ fun HomeScreen(
     var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
     val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
-    // 各卡片**内容固有高度**：取最大值作为统一外框高度（各卡片外框同高，内容尺寸不变）
-    val contentHeights = remember { mutableStateMapOf<HomeCard, Int>() }
-    val densityForFrame = LocalDensity.current
-    val uniformFrameHeight: Dp? = contentHeights.values.maxOrNull()
-        ?.let { with(densityForFrame) { it.toDp() } }
     // 松手后进入"归位动画"阶段的卡片：视觉上仍按被抬起渲染，直到位移回零
     var settlingCard by remember { mutableStateOf<HomeCard?>(null) }
     val activeCard: HomeCard? = draggingCard ?: settlingCard
@@ -300,11 +298,13 @@ fun HomeScreen(
             }
         }
     )
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxHeight()
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
                 .onGloballyPositioned { coords ->
                     // 记录可视区上下边界（根坐标），供边缘自动滚动判断
                     val top = coords.localToRoot(Offset.Zero).y
@@ -388,9 +388,9 @@ fun HomeScreen(
                 editing = layoutEditing,
                 dragging = activeCard == card,
                 dragOffsetY = if (activeCard == card) dragOffsetY else 0f,
-                frameHeight = uniformFrameHeight,
                 onHeightMeasured = { h -> if (blockHeights[card] != h) blockHeights[card] = h },
-                onContentHeight = { h -> if (contentHeights[card] != h) contentHeights[card] = h },
+                // 非被拖卡片在重排时平滑滑到新位置（被拖卡片用 offset 跟手，不加动画以免打架）
+                modifier = if (activeCard == card) Modifier else Modifier.animateItemPlacement(),
                 onDragStart = {
                     draggingCard = card
                     dragOffsetY = 0f

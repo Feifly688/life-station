@@ -49,9 +49,7 @@ import kotlin.math.roundToInt
  * 位移只作用在**视觉层**（[Modifier.offset]），不改变测量尺寸，因此
  * [onHeightMeasured] 汇报的高度始终稳定，可用于相邻交换的阈值判断。
  *
- * @param frameHeight 统一外框高度（所有卡片一致，父层取"内容最高值"下发）；`null` 表示尚未测出。
- * @param onHeightMeasured 上报本区块（外框）实测高度，父层用它决定"拖过一半就交换"。
- * @param onContentHeight 上报**内容固有高度**（不受外框高度约束），父层据此算出统一外框高度。
+ * @param onHeightMeasured 上报本区块实测高度，父层用它决定"拖过一半就交换"。
  */
 @Composable
 internal fun HomeBlock(
@@ -59,24 +57,22 @@ internal fun HomeBlock(
     editing: Boolean,
     dragging: Boolean,
     dragOffsetY: Float,
-    frameHeight: Dp?,
     onHeightMeasured: (Int) -> Unit,
-    onContentHeight: (Int) -> Unit,
     onDragStart: () -> Unit,
     /** 参数：本次位移（像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。 */
     onDragDelta: (Float, Float) -> Unit,
     onDragEnd: () -> Unit,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(20.dp)
     // 手柄在根坐标系中的 Y：拖动时用它换算指针的绝对位置（用于边缘自动滚动）
     var handleTopInRoot by remember(card) { mutableStateOf(0f) }
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { onHeightMeasured(it.size.height) }
             .zIndex(if (dragging) 1f else 0f)
-            .graphicsLayer { alpha = if (dragging) 0.96f else 1f }
             .offsetY(if (dragging) dragOffsetY else 0f)
             .then(
                 if (editing) {
@@ -129,24 +125,8 @@ internal fun HomeBlock(
             }
         }
 
-        // 统一外框（DESIGN.md §6）：所有卡片同宽同高，内容尺寸保持不变、框内垂直居中，
-        // 便于统一移动与网格化管理（参考桌面图标 / 看板 / 仪表盘）。
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (frameHeight != null) Modifier.height(frameHeight) else Modifier),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // 以自身固有高度测量：既不被外框压扁，也让父层拿到真实内容高度
-                    .wrapContentHeight(unbounded = true)
-                    .onGloballyPositioned { onContentHeight(it.size.height) }
-            ) {
-                content()
-            }
-        }
+        // 紧凑布局：内容按自身固有高度渲染，不再撑满统一外框 —— 卡片紧凑、不留大片空白
+        content()
 
         if (editing) Spacer(modifier = Modifier.height(6.dp))
     }
