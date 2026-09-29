@@ -1,14 +1,17 @@
 package com.feiqi.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +73,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
@@ -109,6 +115,7 @@ import com.feiqi.ui.theme.ExpenseRed
 import com.feiqi.ui.theme.IncomeGreen
 import com.feiqi.ui.theme.OnPrimary
 import com.feiqi.ui.theme.OnSurfaceVariant
+import com.feiqi.ui.theme.Outline
 import com.feiqi.ui.theme.OutlineVariant
 import com.feiqi.ui.theme.Primary
 import com.feiqi.ui.theme.PrimaryContainer
@@ -155,6 +162,8 @@ fun HomeScreen(
     var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
     val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
+    // 各区块**可见矩形顶部**（根坐标、含拖拽位移）：用于把被拖卡片钳在可视区内，避免拖到边缘被裁掉
+    val blockVisualTops = remember { mutableStateMapOf<HomeCard, Float>() }
     // 松手后进入"归位动画"阶段的卡片：视觉上仍按被抬起渲染，直到位移回零
     var settlingCard by remember { mutableStateOf<HomeCard?>(null) }
     val activeCard: HomeCard? = draggingCard ?: settlingCard
@@ -205,11 +214,20 @@ fun HomeScreen(
         val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
         if (kotlin.math.abs(dragOffsetY) < snapZone) dragOffsetY = 0f
 
-        // ③ 位移钳制（保险）：正常每跨过一块就会扣掉一块高度，位移天然有界；
-        //    这里再兜一层，任何异常都不会把卡片推出屏幕（即"卡片丢失/空白"）。
-        val maxHeight = blockHeights.values.maxOrNull() ?: 0
-        if (maxHeight > 0) {
-            dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, maxHeight.toFloat())
+        // ③ 双重钳制（"拖到边缘卡片消失"的修复）
+        //    a. 位移不超过卡片自身高度 → 槽位与视觉位置不脱节，槽位不会被列表回收；
+        //    b. 卡片可见矩形始终留在可视区内 → 不会被滚动容器裁掉。
+        val cardHeight = (blockHeights[card] ?: 0).toFloat()
+        dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, cardHeight)
+        val visualTop = blockVisualTops[card]
+        if (cardHeight > 0f && visualTop != null) {
+            dragOffsetY = HomeDragRules.clampToViewport(
+                offset = dragOffsetY,
+                visualTop = visualTop,
+                height = cardHeight,
+                listTop = listTopInRoot,
+                listBottom = listBottomInRoot
+            )
         }
 
         // ③ 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）。
@@ -378,12 +396,27 @@ fun HomeScreen(
         // ---------------- 可排序区块：顺序由 HomeCard 顺序决定（默认顺序见 HomeCard.DEFAULT_ORDER） ----------------
         if (layoutEditing) {
             item {
-                Text(
-                    text = stringResource(R.string.home_layout_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = FeiQiSpacing.lg, end = FeiQiSpacing.sm, top = FeiQiSpacing.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.home_layout_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // 一键还原默认布局
+                    TextButton(onClick = { viewModel.resetCardOrder() }) {
+                        Text(
+                            text = stringResource(R.string.home_layout_reset),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
             }
         }
 
@@ -393,7 +426,10 @@ fun HomeScreen(
                 editing = layoutEditing,
                 dragging = activeCard == card,
                 dragOffsetY = if (activeCard == card) dragOffsetY else 0f,
-                onHeightMeasured = { h -> if (blockHeights[card] != h) blockHeights[card] = h },
+                onBoundsMeasured = { top, h ->
+                    if (blockHeights[card] != h) blockHeights[card] = h
+                    if (blockVisualTops[card] != top) blockVisualTops[card] = top
+                },
                 // 非被拖卡片在重排时平滑滑到新位置（被拖卡片用 offset 跟手，不加动画以免打架）
                 modifier = if (activeCard == card) Modifier else Modifier.animateItemPlacement(
                     animationSpec = tween(220, easing = FastOutSlowInEasing)
@@ -426,11 +462,20 @@ fun HomeScreen(
                 // 响应式：常规屏一行三列；超窄屏（<320dp）纵向堆叠，避免卡片被挤扁
                 val stats = listOf(
                     StatSpec(
-                        stringResource(R.string.month_expense),
-                        "¥${formatMoney(uiState.monthExpense)}",
-                        stringResource(R.string.month_expense_hint),
-                        CardRed,
-                        onOpenAccounting
+                        label = stringResource(R.string.month_expense),
+                        value = "¥${formatMoney(uiState.monthExpense)}",
+                        // 已设置预算时，hint 显示使用率（数据可视化）
+                        hint = if (uiState.budgetSet) {
+                            stringResource(
+                                R.string.budget_used_percent,
+                                (uiState.budgetUsedPercent * 100f).roundToInt()
+                            )
+                        } else {
+                            stringResource(R.string.month_expense_hint)
+                        },
+                        background = CardRed,
+                        onClick = onOpenAccounting,
+                        progress = if (uiState.budgetSet) uiState.budgetUsedPercent else null
                     ),
                     StatSpec(
                         stringResource(R.string.latest_weight),
@@ -461,6 +506,7 @@ fun HomeScreen(
                                     hint = stat.hint,
                                     background = stat.background,
                                     modifier = Modifier.fillMaxWidth(),
+                                    progress = stat.progress,
                                     onClick = stat.onClick
                                 )
                             }
@@ -474,6 +520,7 @@ fun HomeScreen(
                                     hint = stat.hint,
                                     background = stat.background,
                                     modifier = Modifier.weight(1f),
+                                    progress = stat.progress,
                                     onClick = stat.onClick
                                 )
                             }
@@ -669,50 +716,85 @@ private data class StatSpec(
     val value: String,
     val hint: String,
     val background: Color,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    /** 非空时在卡片内画一条进度条（数据可视化，如月度预算使用率）。 */
+    val progress: Float? = null
 )
 
 @Composable
 private fun LifeIndexCard(score: Int, desc: String, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(160.dp),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Primary),
         shape = RoundedCornerShape(20.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .fillMaxWidth()
+                .padding(FeiQiSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = stringResource(R.string.life_index),
-                style = MaterialTheme.typography.labelLarge,
-                color = OnPrimary.copy(alpha = 0.8f)
-            )
-            Row(verticalAlignment = Alignment.Bottom) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "$score",
-                    style = MaterialTheme.typography.displayLarge,
-                    color = OnPrimary
+                    text = stringResource(R.string.life_index),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = OnPrimary.copy(alpha = 0.8f)
                 )
+                Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
                 Text(
-                    text = stringResource(R.string.life_index_full),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = OnPrimary.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
+                    text = desc,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnPrimary.copy(alpha = 0.9f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(
-                text = desc,
-                style = MaterialTheme.typography.bodyMedium,
-                color = OnPrimary.copy(alpha = 0.9f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            Spacer(modifier = Modifier.width(FeiQiSpacing.lg))
+            // 数据可视化：环形进度（分数变化时缓动；中心显示分值）
+            ScoreRing(score = score, modifier = Modifier.size(96.dp))
+        }
+    }
+}
+
+/** 环形进度：把生活指数（0–100）画成一圈进度，比单纯数字更直观。 */
+@Composable
+private fun ScoreRing(score: Int, modifier: Modifier = Modifier) {
+    val target = score.coerceIn(0, 100) / 100f
+    val progress by animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(600, easing = FastOutSlowInEasing),
+        label = "scoreRing"
+    )
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val stroke = size.minDimension * 0.10f
+            val inset = stroke / 2f
+            val arcSize = Size(size.width - stroke, size.height - stroke)
+            val topLeft = Offset(inset, inset)
+            drawArc(
+                color = OnPrimary.copy(alpha = 0.24f),
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
+            )
+            drawArc(
+                color = OnPrimary,
+                startAngle = -90f,
+                sweepAngle = 360f * progress,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = stroke, cap = StrokeCap.Round)
             )
         }
+        Text(
+            text = "$score" + stringResource(R.string.life_index_full),
+            style = MaterialTheme.typography.titleMedium,
+            color = OnPrimary
+        )
     }
 }
 
@@ -723,6 +805,7 @@ private fun StatCard(
     hint: String,
     background: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier,
+    progress: Float? = null,
     onClick: (() -> Unit)? = null
 ) {
     Card(
@@ -754,6 +837,10 @@ private fun StatCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            // 数据可视化：进度条（如月度预算使用率；超支转红）
+            if (progress != null) {
+                BudgetBar(percent = progress)
+            }
             Text(
                 text = hint,
                 style = MaterialTheme.typography.labelSmall,
@@ -762,6 +849,32 @@ private fun StatCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+/** 细进度条：用于"预算使用率"等比例型数据（超支时变红），数值变化带缓动。 */
+@Composable
+private fun BudgetBar(percent: Float, modifier: Modifier = Modifier) {
+    val target = percent.coerceIn(0f, 1f)
+    val over = percent >= 1f
+    val progress by animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(600, easing = FastOutSlowInEasing),
+        label = "budgetBar"
+    )
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(Outline.copy(alpha = 0.45f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress)
+                .fillMaxHeight()
+                .background(if (over) ExpenseRed else Primary)
+        )
     }
 }
 

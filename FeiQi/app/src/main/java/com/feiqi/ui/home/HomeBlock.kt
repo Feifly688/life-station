@@ -56,9 +56,10 @@ import kotlin.math.roundToInt
  * - 正在拖动的区块浮到最上层、跟随手指位移并带阴影。
  *
  * 位移只作用在**视觉层**（[Modifier.offset]），不改变测量尺寸，因此
- * [onHeightMeasured] 汇报的高度始终稳定，可用于相邻交换的阈值判断。
+ * [onBoundsMeasured] 汇报的尺寸/位置只反映布局结果（不含缩放），可用于相邻交换阈值与视口钳制。
  *
- * @param onHeightMeasured 上报本区块实测高度，父层用它决定"拖过一半就交换"。
+ * @param onBoundsMeasured 上报本区块的**可见矩形顶部（根坐标，含拖拽位移）与高度**：
+ *   高度用于"拖过一半就交换"，顶部用于"把卡片钳在可视区内"（防止拖到边缘被裁掉）。
  */
 @Composable
 internal fun HomeBlock(
@@ -66,7 +67,7 @@ internal fun HomeBlock(
     editing: Boolean,
     dragging: Boolean,
     dragOffsetY: Float,
-    onHeightMeasured: (Int) -> Unit,
+    onBoundsMeasured: (top: Float, height: Int) -> Unit,
     onDragStart: () -> Unit,
     /** 参数：本次位移（像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。 */
     onDragDelta: (Float, Float) -> Unit,
@@ -110,7 +111,9 @@ internal fun HomeBlock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .onGloballyPositioned { onHeightMeasured(it.size.height) }
+            .onGloballyPositioned { coords ->
+                onBoundsMeasured(coords.localToRoot(Offset.Zero).y, coords.size.height)
+            }
             .zIndex(if (dragging) 1f else 0f)
             .offsetY(if (dragging) dragOffsetY else 0f)
             .graphicsLayer {

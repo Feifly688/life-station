@@ -8,20 +8,43 @@ package com.feiqi.ui.home
  */
 internal object HomeDragRules {
 
-    /** 位移上限系数：正常情况下每跨过一块就会扣掉一块的高度，位移天然有界，这里是最后一道保险。 */
-    private const val OFFSET_LIMIT_FACTOR = 1.5f
+    /**
+     * 位移钳制：位移绝对值不超过**被拖卡片自身高度**。
+     *
+     * 为什么上限是"一张卡片的高度"：卡片视觉位置 = 槽位 + 位移。位移不超过一张卡片高，
+     * 就保证**槽位与视觉位置始终重叠** —— 槽位不会跑到滚动视口之外被回收，卡片也就不会"消失"。
+     */
+    fun clampOffset(offset: Float, cardHeight: Float): Float =
+        if (cardHeight <= 0f) 0f else offset.coerceIn(-cardHeight, cardHeight)
 
     /**
-     * 位移钳制：无论输入多大，返回值都不会超过 `maxBlockHeight × 1.5`。
+     * 视口钳制：保证卡片的**可见矩形**始终落在列表可视区内。
      *
-     * **不变量**：被拖卡片永远只在自身槽位附近偏移不超过一块半的高度 ——
-     * 这是"卡片不会被推出可视区（即消失/空白）"的兜底。
+     * 超出上边界 → 把位移往下推；超出下边界 → 往上推。
+     * 这是"拖到屏幕顶端/底端附近卡片被滚动容器裁掉、看起来消失/显示异常"的直接修复。
+     *
+     * @param visualTop 卡片当前**可见矩形顶部**（根坐标，含位移）。
+     * @param height 卡片高度。
+     * @param listTop / [listBottom] 可视区上下边界（根坐标）。
      */
-    fun clampOffset(offset: Float, maxBlockHeight: Float): Float =
-        if (maxBlockHeight <= 0f) 0f else offset.coerceIn(
-            -maxBlockHeight * OFFSET_LIMIT_FACTOR,
-            maxBlockHeight * OFFSET_LIMIT_FACTOR
-        )
+    fun clampToViewport(
+        offset: Float,
+        visualTop: Float,
+        height: Float,
+        listTop: Float,
+        listBottom: Float
+    ): Float {
+        if (height <= 0f || listBottom <= listTop) return offset
+        val viewport = listBottom - listTop
+        return when {
+            visualTop < listTop -> offset + (listTop - visualTop)
+            // 卡片比视口还高时只保证顶部可见，避免上下同时钳制来回抖
+            height <= viewport && visualTop + height > listBottom ->
+                offset - (visualTop + height - listBottom)
+
+            else -> offset
+        }
+    }
 
     /**
      * 每帧滚动量（像素，正 = 向下滚，负 = 向上滚）。

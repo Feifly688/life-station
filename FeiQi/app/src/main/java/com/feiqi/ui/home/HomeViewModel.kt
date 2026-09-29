@@ -56,6 +56,21 @@ class HomeViewModel(
         }
     }
 
+    /** 一键恢复首页默认布局（顺序写回默认值并持久化）。 */
+    fun resetCardOrder() {
+        val current = _cardOrder.value
+        if (current == HomeCard.DEFAULT_ORDER) {
+            viewModelScope.launch { _events.emit("已是默认布局") }
+            return
+        }
+        _cardOrder.value = HomeCard.DEFAULT_ORDER
+        viewModelScope.launch {
+            runCatching { preferencesRepository.setHomeCardOrder(HomeCard.DEFAULT_ORDER) }
+                .onSuccess { _events.emit("已恢复默认布局") }
+                .onFailure { _events.emit("恢复失败：${it.message}") }
+        }
+    }
+
     /**
      * 把第 [from] 个区块移动到第 [to] 个位置并立即保存。
      *
@@ -132,6 +147,7 @@ class HomeViewModel(
             monthIncome = income,
             monthBalance = income - expense,
             budgetUsedPercent = used,
+            budgetSet = budgetValue > 0.0,
             todayTodoCount = pendingCount,
             todayTodoItems = todayItems,
             latestWeight = weight,

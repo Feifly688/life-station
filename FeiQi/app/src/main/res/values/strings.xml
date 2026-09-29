@@ -12,6 +12,8 @@
     <string name="home_layout_edit">调整布局</string>
     <string name="home_layout_done">完成</string>
     <string name="home_layout_hint">按住 ☰ 拖动卡片调整顺序</string>
+    <string name="home_layout_reset">恢复默认</string>
+    <string name="budget_used_percent">预算已用 %1$d%%</string>
     <string name="settings">设置</string>
     <string name="empty_state_title">这里还是空的</string>
     <string name="empty_state_desc">记录下第一笔收支，慢慢把生活梳理清楚。</string>
@@ -76,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.10.0</string>
+    <string name="version_value">v1.11.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 

@@ -14,13 +14,13 @@ class HomeDragRulesTest {
     // ---------------- 位移钳制 ----------------
 
     @Test
-    fun clamp_keepsOffsetWithinOneAndHalfBlock() {
-        val maxHeight = 300f
-        assertEquals(0f, HomeDragRules.clampOffset(0f, maxHeight))
-        assertEquals(120f, HomeDragRules.clampOffset(120f, maxHeight))
-        // 关键：自动滚动把位移累加到几千像素时，仍然被钳在 1.5 块高度内
-        assertEquals(450f, HomeDragRules.clampOffset(9999f, maxHeight))
-        assertEquals(-450f, HomeDragRules.clampOffset(-9999f, maxHeight))
+    fun clamp_keepsOffsetWithinCardHeight() {
+        val cardHeight = 300f
+        assertEquals(0f, HomeDragRules.clampOffset(0f, cardHeight))
+        assertEquals(120f, HomeDragRules.clampOffset(120f, cardHeight))
+        // 关键：位移累加到几千像素时，仍被钳在"一张卡片高度"内 —— 槽位与视觉位置不脱节
+        assertEquals(300f, HomeDragRules.clampOffset(9999f, cardHeight))
+        assertEquals(-300f, HomeDragRules.clampOffset(-9999f, cardHeight))
     }
 
     @Test
@@ -33,7 +33,7 @@ class HomeDragRulesTest {
         // 反复钳制不会放大位移（幂等性），保证逐帧调用安全
         var value = 800f
         repeat(10) { value = HomeDragRules.clampOffset(value, 300f) }
-        assertEquals(450f, value)
+        assertEquals(300f, value)
     }
 
     // ---------------- 边缘自动滚动 ----------------
@@ -100,5 +100,43 @@ class HomeDragRulesTest {
         for (y in listOf(bottom - zone + 1f, bottom - zone / 4f, bottom)) {
             assertTrue(step(y) >= 0f)
         }
+    }
+
+    // ---------------- 视口钳制（"拖到边缘卡片消失"的直接修复） ----------------
+
+    private val viewTop = 100f
+    private val viewBottom = 1100f
+
+    @Test
+    fun viewport_insideBounds_isUnchanged() {
+        assertEquals(50f, HomeDragRules.clampToViewport(50f, 300f, 200f, viewTop, viewBottom))
+    }
+
+    @Test
+    fun viewport_aboveTop_isPushedBackDown() {
+        // 卡片可见顶部跑到视口上方 60px → 位移往下补 60，卡片立刻回到视口内
+        val fixed = HomeDragRules.clampToViewport(-200f, viewTop - 60f, 200f, viewTop, viewBottom)
+        assertEquals(-140f, fixed)
+        // 钳制后卡片顶部恰好在视口上边界
+        assertEquals(viewTop, viewTop - 60f + (fixed - (-200f)))
+    }
+
+    @Test
+    fun viewport_belowBottom_isPushedBackUp() {
+        // 卡片底部超出视口下边界 80px → 位移往上收 80
+        val visualTop = viewBottom - 120f
+        assertEquals(220f, HomeDragRules.clampToViewport(300f, visualTop, 200f, viewTop, viewBottom))
+    }
+
+    @Test
+    fun viewport_tallerThanViewport_alignsTopOnly() {
+        // 卡片比视口还高：只保证顶部可见，避免上下同时钳制来回抖
+        assertEquals(10f, HomeDragRules.clampToViewport(0f, viewTop - 10f, 2000f, viewTop, viewBottom))
+    }
+
+    @Test
+    fun viewport_degenerateInputs_areUnchanged() {
+        assertEquals(12f, HomeDragRules.clampToViewport(12f, 0f, 100f, 500f, 500f))
+        assertEquals(12f, HomeDragRules.clampToViewport(12f, 0f, 0f, viewTop, viewBottom))
     }
 }

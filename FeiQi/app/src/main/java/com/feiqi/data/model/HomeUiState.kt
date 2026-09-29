@@ -14,6 +14,8 @@ data class HomeUiState(
     val monthIncome: Double = 0.0,
     val monthBalance: Double = 0.0,
     val budgetUsedPercent: Float = 0f,
+    /** 是否已设置月度预算（用于决定是否展示预算进度条）。 */
+    val budgetSet: Boolean = false,
     /** 今日未完成待办条数（含清单内条目）。 */
     val todayTodoCount: Int = 0,
     /** 今日待办：单条日程 + 待办清单聚合后的结果。 */
