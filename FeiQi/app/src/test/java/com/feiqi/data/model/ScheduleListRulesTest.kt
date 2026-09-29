@@ -79,11 +79,11 @@ class ScheduleListRulesTest {
 
     @Test
     fun partiallyCompletedGroup_staysActive_evenIfOneItemOverdue() {
-        // 清单里有一条过期，但清单整体没完成 → 仍留在待办区
+        // 清单里有一条过期且未完成 → 整张清单算"逾期未完成"，移入已完成区（v1.10 起口径）
         val item = group("L1", listOf(false, true), overdueItem = true)
         val (active, completed) = ScheduleListRules.partition(listOf(item), today)
-        assertEquals(1, active.size)
-        assertTrue(completed.isEmpty())
+        assertTrue(active.isEmpty())
+        assertEquals(1, completed.size)
     }
 
     @Test
@@ -114,35 +114,47 @@ class ScheduleListRulesTest {
     }
 
     @Test
-    fun buildItems_liftsOverdueListItemToSingle() {
+    fun buildItems_keepsListItemsGrouped_evenWhenOverdue() {
+        // 清单里的过期条目也必须留在清单组内，绝不拆成单条（修复"取消勾选→拆开 / 完成→重组"）
         val overdue = Schedule(title = "过期项", date = today.minusDays(1), listId = "L", listTitle = "清单", itemOrder = 0)
         val active = Schedule(title = "进行中", date = today, listId = "L", listTitle = "清单", itemOrder = 1)
-        val done = Schedule(title = "已做完", date = today, completed = true, completedDate = today, listId = "L", listTitle = "清单", itemOrder = 2)
-        val items = ScheduleListRules.buildItems(listOf(overdue, active, done), today)
+        val items = ScheduleListRules.buildItems(listOf(overdue, active))
 
-        // 过期项被拆成单条（从而进已完成区）
-        val lifted = items.filterIsInstance<ScheduleListItem.Single>().first { it.schedule.listId == "L" }
-        assertEquals("过期项", lifted.schedule.title)
-        // 清单组只剩 2 条（进行中 + 已做完）
-        val group = items.filterIsInstance<ScheduleListItem.Group>().first { it.listId == "L" }
-        assertEquals(listOf("进行中", "已做完"), group.items.map { it.title })
-        assertEquals(2, group.total)
-    }
-
-    @Test
-    fun buildItems_allOverdueList_producesNoGroup() {
-        val a = Schedule(title = "A", date = today.minusDays(1), listId = "L", listTitle = "清单")
-        val b = Schedule(title = "B", date = today.minusDays(2), listId = "L", listTitle = "清单")
-        val items = ScheduleListRules.buildItems(listOf(a, b), today)
-        assertTrue(items.none { it is ScheduleListItem.Group })
-        assertEquals(2, items.filterIsInstance<ScheduleListItem.Single>().size)
-    }
-
-    @Test
-    fun buildItems_listDatedToday_isNotLifted() {
-        val a = Schedule(title = "A", date = today, listId = "L", listTitle = "清单")
-        val items = ScheduleListRules.buildItems(listOf(a), today)
         assertEquals(1, items.filterIsInstance<ScheduleListItem.Group>().size)
         assertEquals(0, items.filterIsInstance<ScheduleListItem.Single>().size)
+        val group = items.filterIsInstance<ScheduleListItem.Group>().first()
+        assertEquals(listOf("过期项", "进行中"), group.items.map { it.title })
+    }
+
+    @Test
+    fun group_isOverdue_whenAnyUncompletedItemPassedDeadline() {
+        val done = Schedule(title = "已做完", date = today.minusDays(1), completed = true, completedDate = today, listId = "L", listTitle = "清单")
+        val overdue = Schedule(title = "没过期但没做完", date = today.minusDays(1), listId = "L", listTitle = "清单")
+        val group = ScheduleListItem.Group(listId = "L", title = "清单", items = listOf(done, overdue), recurrence = Recurrence.NONE)
+        assertTrue(group.isOverdue(today))
+        // 全完成 → 不算过期
+        val allDone = ScheduleListItem.Group(listId = "L", title = "清单",
+            items = listOf(done, overdue.copy(completed = true, completedDate = today)), recurrence = Recurrence.NONE)
+        assertFalse(allDone.isOverdue(today))
+    }
+
+    @Test
+    fun overdueUncompletedGroup_goesToCompletedSection() {
+        // 逾期未完成的整张清单 → 进已完成区（且不拆分）
+        val overdue = Schedule(title = "A", date = today.minusDays(1), listId = "L", listTitle = "清单")
+        val group = ScheduleListItem.Group(listId = "L", title = "清单", items = listOf(overdue), recurrence = Recurrence.NONE)
+        val (active, completed) = ScheduleListRules.partition(listOf(group), today)
+        assertTrue(active.isEmpty())
+        assertEquals(1, completed.size)
+        assertEquals(group, completed.first())
+    }
+
+    @Test
+    fun nonOverdueUncompletedGroup_staysActive() {
+        val item = Schedule(title = "A", date = today, listId = "L", listTitle = "清单")
+        val group = ScheduleListItem.Group(listId = "L", title = "清单", items = listOf(item), recurrence = Recurrence.NONE)
+        val (active, completed) = ScheduleListRules.partition(listOf(group), today)
+        assertEquals(1, active.size)
+        assertTrue(completed.isEmpty())
     }
 }

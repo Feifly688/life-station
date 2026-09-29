@@ -609,7 +609,7 @@ class ScheduleViewModel(
     fun canScheduleExact(): Boolean = reminderScheduler.canScheduleExact()
 
     private fun buildListItems(all: List<Schedule>): List<ScheduleListItem> =
-        ScheduleListRules.buildItems(all, DateUtils.today())
+        ScheduleListRules.buildItems(all)
 }
 
 /** 清单编辑时单条待办的传输对象。 */

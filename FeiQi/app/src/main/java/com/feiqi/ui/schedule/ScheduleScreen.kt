@@ -375,7 +375,8 @@ fun ScheduleScreen(
                                 expanded = item is ScheduleListItem.Group && item.listId in expandedDoneListIds,
                                 selectionMode = selectionMode,
                                 selected = isSelected(item),
-                                isCompleted = true,
+                                // 逾期未完成的清单也在已完成区，此时不应被当成"已完成"（否则标题划删除线、子项勾选框被禁用）
+                                isCompleted = item is ScheduleListItem.Group && item.allCompleted,
                                 onToggleGroup = { listId ->
                                     if (!selectionMode) {
                                         expandedDoneListIds = expandedDoneListIds.xor(listId)
