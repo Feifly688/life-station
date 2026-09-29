@@ -1,6 +1,15 @@
 package com.feiqi.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
@@ -68,26 +77,60 @@ internal fun HomeBlock(
     val shape = RoundedCornerShape(20.dp)
     // 手柄在根坐标系中的 Y：拖动时用它换算指针的绝对位置（用于边缘自动滚动）
     var handleTopInRoot by remember(card) { mutableStateOf(0f) }
+
+    // ---- 动效（DESIGN.md §10）：全部走同一套 150–200ms / FastOutSlowInEasing 节奏 ----
+    // 编辑态装饰（内边距 + 底色 + 手柄）淡入淡出，避免模式切换时"瞬间弹出"的跳变
+    val editChrome by animateFloatAsState(
+        targetValue = if (editing) 1f else 0f,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "editChrome"
+    )
+    val chromePadH by animateDpAsState(
+        targetValue = if (editing) 8.dp else 0.dp,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "chromePadH"
+    )
+    val chromePadV by animateDpAsState(
+        targetValue = if (editing) 4.dp else 0.dp,
+        animationSpec = tween(200, easing = FastOutSlowInEasing),
+        label = "chromePadV"
+    )
+    // 被拖卡片抬起：轻微放大 + 阴影加深（150ms，快而稳）
+    val liftScale by animateFloatAsState(
+        targetValue = if (dragging) 1.02f else 1f,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        label = "liftScale"
+    )
+    val liftShadow by animateDpAsState(
+        targetValue = if (dragging) 10.dp else 0.dp,
+        animationSpec = tween(150, easing = FastOutSlowInEasing),
+        label = "liftShadow"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { onHeightMeasured(it.size.height) }
             .zIndex(if (dragging) 1f else 0f)
             .offsetY(if (dragging) dragOffsetY else 0f)
-            .then(
-                if (editing) {
-                    Modifier
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .shadow(if (dragging) 10.dp else 0.dp, shape, clip = false)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), shape)
-                        // 与弹窗/导航栏统一的高光边语言（DESIGN.md §4）
-                        .glassEdge(shape, GlassStrength.Regular)
-                } else {
-                    Modifier
-                }
-            )
+            .graphicsLayer {
+                scaleX = liftScale
+                scaleY = liftScale
+            }
+            .padding(horizontal = chromePadH, vertical = chromePadV)
+            .shadow(liftShadow, shape, clip = false)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f * editChrome), shape)
+            // 与弹窗/导航栏统一的高光边语言（DESIGN.md §4）
+            .then(if (editing) Modifier.glassEdge(shape, GlassStrength.Regular) else Modifier)
     ) {
-        if (editing) {
+        // 编辑工具栏：随模式淡入淡出 + 高度展开/收起（进入 200ms，退出 150ms）
+        AnimatedVisibility(
+            visible = editing,
+            enter = fadeIn(tween(200, easing = FastOutSlowInEasing)) +
+                expandVertically(tween(200, easing = FastOutSlowInEasing)),
+            exit = fadeOut(tween(150, easing = FastOutSlowInEasing)) +
+                shrinkVertically(tween(150, easing = FastOutSlowInEasing))
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -127,8 +170,6 @@ internal fun HomeBlock(
 
         // 紧凑布局：内容按自身固有高度渲染，不再撑满统一外框 —— 卡片紧凑、不留大片空白
         content()
-
-        if (editing) Spacer(modifier = Modifier.height(6.dp))
     }
 }
 

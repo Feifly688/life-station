@@ -3,6 +3,8 @@ package com.feiqi.ui.home
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
@@ -12,6 +14,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -314,7 +317,9 @@ fun HomeScreen(
                 }
                 // 编辑布局时关闭下拉刷新：拖拽是纵向手势，否则极易误触刷新
                 .pullRefresh(pullState, enabled = !layoutEditing && draggingCard == null),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            // 统一垂直节奏：区块间距一律 FeiQiSpacing.lg，不再由各区块自己加 Spacer
+            verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.lg),
+            contentPadding = PaddingValues(bottom = FeiQiSpacing.xl)
         ) {
         item {
             Row(
@@ -390,7 +395,9 @@ fun HomeScreen(
                 dragOffsetY = if (activeCard == card) dragOffsetY else 0f,
                 onHeightMeasured = { h -> if (blockHeights[card] != h) blockHeights[card] = h },
                 // 非被拖卡片在重排时平滑滑到新位置（被拖卡片用 offset 跟手，不加动画以免打架）
-                modifier = if (activeCard == card) Modifier else Modifier.animateItemPlacement(),
+                modifier = if (activeCard == card) Modifier else Modifier.animateItemPlacement(
+                    animationSpec = tween(220, easing = FastOutSlowInEasing)
+                ),
                 onDragStart = {
                     draggingCard = card
                     dragOffsetY = 0f
@@ -413,42 +420,66 @@ fun HomeScreen(
                     desc = stringResource(R.string.life_index_desc),
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
                     }
 
                     HomeCard.STATS -> {
-                Row(
+                // 响应式：常规屏一行三列；超窄屏（<320dp）纵向堆叠，避免卡片被挤扁
+                val stats = listOf(
+                    StatSpec(
+                        stringResource(R.string.month_expense),
+                        "¥${formatMoney(uiState.monthExpense)}",
+                        stringResource(R.string.month_expense_hint),
+                        CardRed,
+                        onOpenAccounting
+                    ),
+                    StatSpec(
+                        stringResource(R.string.latest_weight),
+                        uiState.latestWeight?.let { "${it.weight}kg" } ?: "--",
+                        stringResource(R.string.latest_weight_hint),
+                        CardGreen,
+                        onOpenHealth
+                    ),
+                    StatSpec(
+                        stringResource(R.string.today_todo),
+                        "${uiState.todayTodoCount}件",
+                        stringResource(R.string.today_todo_hint),
+                        CardAmber,
+                        onOpenSchedule
+                    )
+                )
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(horizontal = FeiQiSpacing.lg)
                 ) {
-                    StatCard(
-                        label = stringResource(R.string.month_expense),
-                        value = "¥${formatMoney(uiState.monthExpense)}",
-                        hint = stringResource(R.string.month_expense_hint),
-                        background = CardRed,
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenAccounting
-                    )
-                    StatCard(
-                        label = stringResource(R.string.latest_weight),
-                        value = uiState.latestWeight?.let { "${it.weight}kg" } ?: "--",
-                        hint = stringResource(R.string.latest_weight_hint),
-                        background = CardGreen,
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenHealth
-                    )
-                    StatCard(
-                        label = stringResource(R.string.today_todo),
-                        value = "${uiState.todayTodoCount}件",
-                        hint = stringResource(R.string.today_todo_hint),
-                        background = CardAmber,
-                        modifier = Modifier.weight(1f),
-                        onClick = onOpenSchedule
-                    )
+                    if (maxWidth < 320.dp) {
+                        Column(verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.md)) {
+                            stats.forEach { stat ->
+                                StatCard(
+                                    label = stat.label,
+                                    value = stat.value,
+                                    hint = stat.hint,
+                                    background = stat.background,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = stat.onClick
+                                )
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.md)) {
+                            stats.forEach { stat ->
+                                StatCard(
+                                    label = stat.label,
+                                    value = stat.value,
+                                    hint = stat.hint,
+                                    background = stat.background,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = stat.onClick
+                                )
+                            }
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(16.dp))
                     }
 
                     HomeCard.TODAY_TODO -> {
@@ -490,7 +521,6 @@ fun HomeScreen(
 
                     HomeCard.SHOPPING -> {
             // ---------------- 购买物品（待买 / 已买） ----------------
-                Spacer(modifier = Modifier.height(16.dp))
                 SectionHeader(
                     title = stringResource(R.string.shopping_list),
                     action = stringResource(R.string.add_shopping_item),
@@ -518,7 +548,6 @@ fun HomeScreen(
 
                     HomeCard.MEDIA -> {
             // ---------------- 书影音（最近作品） ----------------
-                Spacer(modifier = Modifier.height(16.dp))
                 SectionHeader(
                     title = stringResource(R.string.media_collection),
                     action = stringResource(R.string.all),
@@ -633,6 +662,15 @@ fun HomeScreen(
         DeleteConfirmHost(state = deleteConfirm)
     }
 }
+
+/** 统计卡的数据载体（供响应式布局按行/按列复用同一份数据）。 */
+private data class StatSpec(
+    val label: String,
+    val value: String,
+    val hint: String,
+    val background: Color,
+    val onClick: () -> Unit
+)
 
 @Composable
 private fun LifeIndexCard(score: Int, desc: String, modifier: Modifier = Modifier) {
