@@ -392,6 +392,14 @@ fun ScheduleScreen(
                                     if (!selectionMode) {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         viewModel.setGroupCompleted(listId, completed)
+                                        // 取消勾选「逾期清单」时自动展开，便于继续查看/编辑（仅逾期清单，不影响其他）
+                                        if (!completed && item is ScheduleListItem.Group &&
+                                            item.items.any { it.isDeadlineOverdue(today) }
+                                        ) {
+                                            if (listId !in expandedDoneListIds) {
+                                                expandedDoneListIds = expandedDoneListIds + listId
+                                            }
+                                        }
                                     }
                                 },
                                 onLongPress = { target ->
