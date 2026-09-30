@@ -16,10 +16,15 @@ class ScheduleListRulesTest {
 
     private val today = LocalDate.of(2026, 9, 25)
 
+    /**
+     * 默认 **不带时间**：`Schedule.isOverdue` 对"当天"的判定会读真实时钟
+     * （`now > time`），若默认给一个固定时刻，测试会在一天中的某些时段随机失败。
+     * 需要验证"当天过了打卡时刻"时，请显式传 [time]。
+     */
     private fun single(
         id: Long,
         date: LocalDate = today,
-        time: LocalTime? = LocalTime.of(23, 0),
+        time: LocalTime? = null,
         reminder: Boolean = true,
         completed: Boolean = false
     ) = ScheduleListItem.Single(

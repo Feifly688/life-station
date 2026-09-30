@@ -131,9 +131,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // 拖拽到边缘时的自动滚动参数：感应区高度、每帧最小/最大滚动量
-private val HOME_EDGE_SCROLL_ZONE = 96.dp
-private val HOME_EDGE_SCROLL_MIN = 2.dp
-private val HOME_EDGE_SCROLL_MAX = 16.dp
+private val HOME_EDGE_SCROLL_ZONE = 112.dp
+private val HOME_EDGE_SCROLL_MIN = 3.dp
+private val HOME_EDGE_SCROLL_MAX = 20.dp
 
 /** 拖动中的磁性吸附死区（dp）：位移小于它时卡片被"吸"回槽位，靠近槽位更有"格子感"。 */
 private val HOME_SNAP_ZONE = 8.dp
@@ -161,6 +161,9 @@ fun HomeScreen(
     var layoutEditing by remember { mutableStateOf(false) }
     var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
     var dragOffsetY by remember { mutableStateOf(0f) }
+    // 渲染位移：= 逻辑位移 + 视口钳制修正。**只用于绘制**，不回写逻辑位移 ——
+    // 否则钳制会污染换位判定（相邻卡片被误触换位）并压住自动滚动的位移补偿（卡片卡住）。
+    var renderOffsetY by remember { mutableStateOf(0f) }
     val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
     // 各区块**可见矩形顶部**（根坐标、含拖拽位移）：用于把被拖卡片钳在可视区内，避免拖到边缘被裁掉
     val blockVisualTops = remember { mutableStateMapOf<HomeCard, Float>() }
@@ -214,20 +217,24 @@ fun HomeScreen(
         val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
         if (kotlin.math.abs(dragOffsetY) < snapZone) dragOffsetY = 0f
 
-        // ③ 双重钳制（"拖到边缘卡片消失"的修复）
-        //    a. 位移不超过卡片自身高度 → 槽位与视觉位置不脱节，槽位不会被列表回收；
-        //    b. 卡片可见矩形始终留在可视区内 → 不会被滚动容器裁掉。
+        // ③ 钳制（"拖到边缘卡片消失"的修复）
+        //    a. **逻辑位移**只受"不超过卡片自身高度"约束 → 槽位与视觉位置不脱节，槽位不会被列表回收；
+        //       逻辑位移是驱动"换位判定 + 自动滚动补偿"的唯一来源，**绝不能被视口钳制改写**。
+        //    b. 视口钳制只生成**渲染位移**：保证可见矩形留在可视区内，但不参与任何判定 ——
+        //       这样既不会误触相邻卡片换位，也不会压住自动滚动的位移补偿（即"卡住"）。
         val cardHeight = (blockHeights[card] ?: 0).toFloat()
         dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, cardHeight)
         val visualTop = blockVisualTops[card]
-        if (cardHeight > 0f && visualTop != null) {
-            dragOffsetY = HomeDragRules.clampToViewport(
+        renderOffsetY = if (cardHeight > 0f && visualTop != null) {
+            HomeDragRules.clampToViewport(
                 offset = dragOffsetY,
                 visualTop = visualTop,
                 height = cardHeight,
                 listTop = listTopInRoot,
                 listBottom = listBottomInRoot
             )
+        } else {
+            dragOffsetY
         }
 
         // ③ 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）。
@@ -251,7 +258,8 @@ fun HomeScreen(
     // 松手吸附：不在合法槽位时**平滑**回到最近合法槽位（即位移回零），结束后无任何残留偏移
     LaunchedEffect(settlingCard) {
         val card = settlingCard ?: return@LaunchedEffect
-        val from = dragOffsetY
+        val from = renderOffsetY
+        dragOffsetY = 0f // 逻辑位移已无用，先归零避免下一次拖动残留
         if (from != 0f) {
             // 弹簧回弹：比匀速 tween 更有"咔哒"落位感
             Animatable(from).animateTo(
@@ -260,10 +268,10 @@ fun HomeScreen(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
                     stiffness = Spring.StiffnessMedium
                 )
-            ) { dragOffsetY = value }
+            ) { renderOffsetY = value }
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
-        dragOffsetY = 0f
+        renderOffsetY = 0f
         settlingCard = null
     }
 
@@ -425,7 +433,7 @@ fun HomeScreen(
                 card = card,
                 editing = layoutEditing,
                 dragging = activeCard == card,
-                dragOffsetY = if (activeCard == card) dragOffsetY else 0f,
+                dragOffsetY = if (activeCard == card) renderOffsetY else 0f,
                 onBoundsMeasured = { top, h ->
                     if (blockHeights[card] != h) blockHeights[card] = h
                     if (blockVisualTops[card] != top) blockVisualTops[card] = top
@@ -437,6 +445,7 @@ fun HomeScreen(
                 onDragStart = {
                     draggingCard = card
                     dragOffsetY = 0f
+                    renderOffsetY = 0f
                 },
                 onDragDelta = { delta, pointerY -> onBlockDrag(card, delta, pointerY) },
                 onDragEnd = {
@@ -446,7 +455,8 @@ fun HomeScreen(
                     draggingCard = null
                     autoScrollStep = 0f
                     dragPointerRootY = 0f
-                    if (card != null) settlingCard = card else dragOffsetY = 0f
+                    dragOffsetY = 0f
+                    if (card != null) settlingCard = card else renderOffsetY = 0f
                 }
             ) {
                 when (card) {
