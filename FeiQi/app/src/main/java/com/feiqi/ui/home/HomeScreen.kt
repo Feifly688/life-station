@@ -131,7 +131,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // 拖拽到边缘时的自动滚动参数：感应区高度、每帧最小/最大滚动量
-private val HOME_EDGE_SCROLL_ZONE = 112.dp
+/**
+ * 边缘自动滚动的**感应区比例**：进入可视区上下各 1/4 区域即触发滚动，
+ * 无需一直拖到最边缘。想更早/更晚触发只需改这一个数。
+ */
+private const val HOME_EDGE_ZONE_RATIO = 0.25f
+
+/** 感应区下限（可视区很矮时兜底，避免感应区被压得几乎不存在）。 */
+private val HOME_EDGE_SCROLL_ZONE_MIN = 72.dp
 private val HOME_EDGE_SCROLL_MIN = 3.dp
 private val HOME_EDGE_SCROLL_MAX = 20.dp
 
@@ -250,11 +257,17 @@ fun HomeScreen(
         val index = cardOrder.indexOf(card)
         val canScrollUp = index > 0
         val canScrollDown = index < cardOrder.lastIndex
+        // 感应区 = 可视区高度 × 1/4（有下限兜底）：进入上下各 1/4 区域就开始滚动
+        val viewportHeight = (listBottomInRoot - listTopInRoot).coerceAtLeast(0f)
+        val zonePx = maxOf(
+            viewportHeight * HOME_EDGE_ZONE_RATIO,
+            with(density) { HOME_EDGE_SCROLL_ZONE_MIN.toPx() }
+        )
         autoScrollStep = HomeDragRules.autoScrollStep(
             pointerRootY = pointerRootY,
             listTop = listTopInRoot,
             listBottom = listBottomInRoot,
-            zone = with(density) { HOME_EDGE_SCROLL_ZONE.toPx() },
+            zone = zonePx,
             minStep = with(density) { HOME_EDGE_SCROLL_MIN.toPx() },
             maxStep = with(density) { HOME_EDGE_SCROLL_MAX.toPx() },
             canScrollUp = canScrollUp,

@@ -177,4 +177,35 @@ class HomeDragRulesTest {
         // 残差不足以触发反向让位（天然滞回，不会来回跳）
         assertEquals(0, HomeDragRules.swapDirection(residual, n, n))
     }
+
+    @Test
+    fun step_quarterViewportZone_triggersBeforeReachingTheEdge() {
+        // 感应区 = 可视区高度 × 1/4：进入上下各 1/4 区域即开始滚动（无需拖到最边缘）
+        val top = 0f
+        val bottom = 800f
+        val zone = (bottom - top) / 4f // 200
+        val justInsideBottom = HomeDragRules.autoScrollStep(
+            pointerRootY = bottom - zone + 1f,
+            listTop = top,
+            listBottom = bottom,
+            zone = zone,
+            minStep = 3f,
+            maxStep = 20f,
+            canScrollUp = true,
+            canScrollDown = true
+        )
+        assertTrue("进入下 1/4 区域就应开始滚动，实际 $justInsideBottom", justInsideBottom > 0f)
+
+        val outsideZone = HomeDragRules.autoScrollStep(
+            pointerRootY = bottom - zone - 1f,
+            listTop = top,
+            listBottom = bottom,
+            zone = zone,
+            minStep = 3f,
+            maxStep = 20f,
+            canScrollUp = true,
+            canScrollDown = true
+        )
+        assertEquals("1/4 区域之外不应滚动", 0f, outsideZone)
+    }
 }
