@@ -139,4 +139,42 @@ class HomeDragRulesTest {
         assertEquals(12f, HomeDragRules.clampToViewport(12f, 0f, 100f, 500f, 500f))
         assertEquals(12f, HomeDragRules.clampToViewport(12f, 0f, 0f, viewTop, viewBottom))
     }
+
+    // ---------------- 让位判定（"其余卡片不提前让位"） ----------------
+
+    @Test
+    fun swap_doesNotYieldBeforeReachingTargetSlot() {
+        val n = 300f
+        // 旧阈值（半块）与新阈值（0.9 块）都不再让位 —— 其余卡片保持不动
+        assertEquals(0, HomeDragRules.swapDirection(n / 2f, n, n))
+        assertEquals(0, HomeDragRules.swapDirection(n * 0.9f, n, n))
+        // 真正悬停到目标位置（越过整块）才让位
+        assertEquals(1, HomeDragRules.swapDirection(n * 1.01f, n, n))
+    }
+
+    @Test
+    fun swap_upward_alsoRequiresFullBlock() {
+        val prev = 260f
+        assertEquals(0, HomeDragRules.swapDirection(-prev * 0.9f, 0f, prev))
+        assertEquals(-1, HomeDragRules.swapDirection(-prev * 1.01f, 0f, prev))
+    }
+
+    @Test
+    fun swap_atListBoundaries_neverYields() {
+        // 队首继续向上拖 / 队尾继续向下拖：没有邻块（高度 0）→ 不让位
+        assertEquals(0, HomeDragRules.swapDirection(-9999f, 300f, 0f))
+        assertEquals(0, HomeDragRules.swapDirection(9999f, 0f, 300f))
+    }
+
+    @Test
+    fun swap_residualAfterSwapIsNearZero_soNoJumpAndNoFlapping() {
+        val n = 320f
+        val offsetAtSwap = n + 1f
+        assertEquals(1, HomeDragRules.swapDirection(offsetAtSwap, n, n))
+        // 换位时 dragOffsetY -= n → 残差≈0（视觉连续、不跳动）
+        val residual = offsetAtSwap - n
+        assertTrue("残差应接近 0，实际 $residual", kotlin.math.abs(residual) < n * 0.05f)
+        // 残差不足以触发反向让位（天然滞回，不会来回跳）
+        assertEquals(0, HomeDragRules.swapDirection(residual, n, n))
+    }
 }

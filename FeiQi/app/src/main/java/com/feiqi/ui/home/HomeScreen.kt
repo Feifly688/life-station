@@ -190,21 +190,23 @@ fun HomeScreen(
      * 位移会单方面累加（滚动补偿）而卡片永远不落位 → 卡片被推出可视区、界面只剩空白。
      */
     fun settleDrag(card: HomeCard, pointerRootY: Float) {
-        // ① 换位判定：用 while 连续跨越，高速拖动时一帧可能跨过多个区块
+        // ① 让位判定：**位移越过邻块整块高度**才让位（等价于"被拖卡片中心越过邻块中心"）。
+        //    这样其余卡片不会提前让位；且恰在 offset≈邻块高 时触发，换位后残差≈0，不会来回跳。
+        //    用 while 连续跨越：高速拖动时一帧可能跨过多个区块。
         while (true) {
             val index = cardOrder.indexOf(card)
             if (index < 0) return
             val nextHeight =
-                if (dragOffsetY > 0 && index < cardOrder.lastIndex) blockHeights[cardOrder[index + 1]] ?: 0 else 0
+                if (index < cardOrder.lastIndex) (blockHeights[cardOrder[index + 1]] ?: 0).toFloat() else 0f
             val prevHeight =
-                if (dragOffsetY < 0 && index > 0) blockHeights[cardOrder[index - 1]] ?: 0 else 0
-            when {
-                nextHeight > 0 && dragOffsetY > nextHeight / 2f -> {
+                if (index > 0) (blockHeights[cardOrder[index - 1]] ?: 0).toFloat() else 0f
+            when (HomeDragRules.swapDirection(dragOffsetY, nextHeight, prevHeight)) {
+                1 -> {
                     viewModel.moveCard(index, index + 1)
                     dragOffsetY -= nextHeight
                 }
 
-                prevHeight > 0 && -dragOffsetY > prevHeight / 2f -> {
+                -1 -> {
                     viewModel.moveCard(index, index - 1)
                     dragOffsetY += prevHeight
                 }
@@ -213,28 +215,33 @@ fun HomeScreen(
             }
         }
 
-        // ② 磁性吸附：位移很小时把卡片"吸"回槽位 —— 靠近槽位更跟手、更像桌面图标/看板
-        val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
-        if (kotlin.math.abs(dragOffsetY) < snapZone) dragOffsetY = 0f
-
         // ③ 钳制（"拖到边缘卡片消失"的修复）
         //    a. **逻辑位移**只受"不超过卡片自身高度"约束 → 槽位与视觉位置不脱节，槽位不会被列表回收；
         //       逻辑位移是驱动"换位判定 + 自动滚动补偿"的唯一来源，**绝不能被视口钳制改写**。
         //    b. 视口钳制只生成**渲染位移**：保证可见矩形留在可视区内，但不参与任何判定 ——
         //       这样既不会误触相邻卡片换位，也不会压住自动滚动的位移补偿（即"卡住"）。
         val cardHeight = (blockHeights[card] ?: 0).toFloat()
-        dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, cardHeight)
+        val idxNow = cardOrder.indexOf(card)
+        val nextH = if (idxNow in 0 until cardOrder.lastIndex) (blockHeights[cardOrder[idxNow + 1]] ?: 0).toFloat() else 0f
+        val prevH = if (idxNow > 0) (blockHeights[cardOrder[idxNow - 1]] ?: 0).toFloat() else 0f
+        // 上限 = max(卡片自身高, 相邻两块高)：既保证"整块让位"阈值可达，又不过度偏离槽位
+        dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, maxOf(cardHeight, nextH, prevH))
+
+        // 磁性吸附：位移很小时视觉上"吸"回槽位（**只作用于渲染位移**，不影响判定，慢速拖动也能累加）
+        val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
+        val magnetized = if (kotlin.math.abs(dragOffsetY) < snapZone) 0f else dragOffsetY
+
         val visualTop = blockVisualTops[card]
         renderOffsetY = if (cardHeight > 0f && visualTop != null) {
             HomeDragRules.clampToViewport(
-                offset = dragOffsetY,
+                offset = magnetized,
                 visualTop = visualTop,
                 height = cardHeight,
                 listTop = listTopInRoot,
                 listBottom = listBottomInRoot
             )
         } else {
-            dragOffsetY
+            magnetized
         }
 
         // ③ 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）。
