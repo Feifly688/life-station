@@ -140,72 +140,60 @@ class HomeDragRulesTest {
         assertEquals(12f, HomeDragRules.clampToViewport(12f, 0f, 0f, viewTop, viewBottom))
     }
 
-    // ---------------- 让位判定（"其余卡片不提前让位"） ----------------
+    // ---------------- 网格让位判定（2D）：不提前让位 + 同行左右正确 ----------------
+
+    /** 行容差（约半个卡片高）。 */
+    private val tol = 60f
+
+    private fun c(x: Float, y: Float) = HomeDragRules.CellCenter(x, y)
 
     @Test
-    fun swap_doesNotYieldBeforeReachingTargetSlot() {
-        val n = 300f
-        // 旧阈值（半块）与新阈值（0.9 块）都不再让位 —— 其余卡片保持不动
-        assertEquals(0, HomeDragRules.swapDirection(n / 2f, n, n))
-        assertEquals(0, HomeDragRules.swapDirection(n * 0.9f, n, n))
-        // 真正悬停到目标位置（越过整块）才让位
-        assertEquals(1, HomeDragRules.swapDirection(n * 1.01f, n, n))
+    fun grid_vertical_doesNotYieldBeforeCenterCrosses() {
+        // 纵向相邻（异行）：上一张中心 y=0、下一张中心 y=600
+        val prev = c(100f, 0f)
+        val next = c(100f, 600f)
+        // 被拖中心仍在两者之间 → 不动（不提前让位）
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(100f, 540f), next, prev, false, false))
+        // 越过下一张中心 → 与下一张交换
+        assertEquals(1, HomeDragRules.gridSwapDirection(c(100f, 620f), next, prev, false, false))
+        // 回到上一张中心之上 → 与上一张交换
+        assertEquals(-1, HomeDragRules.gridSwapDirection(c(100f, -20f), next, prev, false, false))
     }
 
     @Test
-    fun swap_upward_alsoRequiresFullBlock() {
-        val prev = 260f
-        assertEquals(0, HomeDragRules.swapDirection(-prev * 0.9f, 0f, prev))
-        assertEquals(-1, HomeDragRules.swapDirection(-prev * 1.01f, 0f, prev))
+    fun grid_horizontal_onlySwapsWithinSameRow() {
+        // 同一行两张半宽瓷砖：左 x=100、右 x=300
+        val left = c(100f, 100f)
+        val right = c(300f, 100f)
+        // 未越过左卡中心 → 不动
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(280f, 100f), null, left, false, true))
+        // 越过左卡中心 → 交换
+        assertEquals(1, HomeDragRules.gridSwapDirection(c(320f, 100f), right, left, true, true))
     }
 
     @Test
-    fun swap_atListBoundaries_neverYields() {
-        // 队首继续向上拖 / 队尾继续向下拖：没有邻块（高度 0）→ 不让位
-        assertEquals(0, HomeDragRules.swapDirection(-9999f, 300f, 0f))
-        assertEquals(0, HomeDragRules.swapDirection(9999f, 0f, 300f))
+    fun grid_sameRowNeighbor_ignoresVerticalOffset() {
+        // 同行邻卡：横向未越过时，纵向偏多远都不该让位（避免"左右拖动跑到上下行"）
+        val sameRow = c(100f, 200f)
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(80f, 210f), sameRow, null, true, false))
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(80f, 900f), sameRow, null, true, false))
+        // 横向越过才让位
+        assertEquals(1, HomeDragRules.gridSwapDirection(c(140f, 900f), sameRow, null, true, false))
     }
 
     @Test
-    fun swap_residualAfterSwapIsNearZero_soNoJumpAndNoFlapping() {
-        val n = 320f
-        val offsetAtSwap = n + 1f
-        assertEquals(1, HomeDragRules.swapDirection(offsetAtSwap, n, n))
-        // 换位时 dragOffsetY -= n → 残差≈0（视觉连续、不跳动）
-        val residual = offsetAtSwap - n
-        assertTrue("残差应接近 0，实际 $residual", kotlin.math.abs(residual) < n * 0.05f)
-        // 残差不足以触发反向让位（天然滞回，不会来回跳）
-        assertEquals(0, HomeDragRules.swapDirection(residual, n, n))
+    fun grid_atBoundaries_neverYields() {
+        // 队首继续向上拖 / 队尾继续向下拖：没有相邻卡片 → 不让位
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(100f, -9999f), c(100f, 600f), null, false, false))
+        assertEquals(0, HomeDragRules.gridSwapDirection(c(100f, 9999f), null, c(100f, 0f), false, false))
     }
 
     @Test
-    fun step_quarterViewportZone_triggersBeforeReachingTheEdge() {
-        // 感应区 = 可视区高度 × 1/4：进入上下各 1/4 区域即开始滚动（无需拖到最边缘）
-        val top = 0f
-        val bottom = 800f
-        val zone = (bottom - top) / 4f // 200
-        val justInsideBottom = HomeDragRules.autoScrollStep(
-            pointerRootY = bottom - zone + 1f,
-            listTop = top,
-            listBottom = bottom,
-            zone = zone,
-            minStep = 3f,
-            maxStep = 20f,
-            canScrollUp = true,
-            canScrollDown = true
+    fun grid_noFlappingAfterSwap() {
+        // 换位后视觉连续（位移减去槽距）→ 被拖中心恰好落在新槽位上，不应立刻反向让位
+        assertEquals(
+            0,
+            HomeDragRules.gridSwapDirection(c(100f, 600f), c(100f, 900f), c(100f, 300f), false, false)
         )
-        assertTrue("进入下 1/4 区域就应开始滚动，实际 $justInsideBottom", justInsideBottom > 0f)
-
-        val outsideZone = HomeDragRules.autoScrollStep(
-            pointerRootY = bottom - zone - 1f,
-            listTop = top,
-            listBottom = bottom,
-            zone = zone,
-            minStep = 3f,
-            maxStep = 20f,
-            canScrollUp = true,
-            canScrollDown = true
-        )
-        assertEquals("1/4 区域之外不应滚动", 0f, outsideZone)
     }
 }

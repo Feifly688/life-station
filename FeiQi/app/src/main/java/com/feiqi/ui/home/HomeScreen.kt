@@ -1,6 +1,7 @@
 package com.feiqi.ui.home
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -31,12 +32,12 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -73,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -131,6 +133,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // 拖拽到边缘时的自动滚动参数：感应区高度、每帧最小/最大滚动量
+/** 首页网格列数（固定 2 列：半宽瓷砖两两并排，整行卡片占满）。 */
+private const val HOME_GRID_COLUMNS = 2
+
 /**
  * 边缘自动滚动的**感应区比例**：进入可视区上下各 1/4 区域即触发滚动，
  * 无需一直拖到最边缘。想更早/更晚触发只需改这一个数。
@@ -167,24 +172,26 @@ fun HomeScreen(
     val cardOrder by viewModel.cardOrder.collectAsStateWithLifecycle()
     var layoutEditing by remember { mutableStateOf(false) }
     var draggingCard by remember { mutableStateOf<HomeCard?>(null) }
-    var dragOffsetY by remember { mutableStateOf(0f) }
-    // 渲染位移：= 逻辑位移 + 视口钳制修正。**只用于绘制**，不回写逻辑位移 ——
-    // 否则钳制会污染换位判定（相邻卡片被误触换位）并压住自动滚动的位移补偿（卡片卡住）。
-    var renderOffsetY by remember { mutableStateOf(0f) }
-    val blockHeights = remember { mutableStateMapOf<HomeCard, Int>() }
-    // 各区块**可见矩形顶部**（根坐标、含拖拽位移）：用于把被拖卡片钳在可视区内，避免拖到边缘被裁掉
-    val blockVisualTops = remember { mutableStateMapOf<HomeCard, Float>() }
+    // 逻辑位移（2D）：手指位移 + 自动滚动补偿，**只**驱动让位与滚动判定
+    var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    // 渲染位移（2D）：= 逻辑位移 + 视口钳制修正。**只用于绘制**，不回写逻辑位移 ——
+    // 否则钳制会污染让位判定（相邻卡片被误触换位）并压住自动滚动的位移补偿（卡片卡住）。
+    var renderOffset by remember { mutableStateOf(Offset.Zero) }
+    // 各卡片**布局矩形**（根坐标，不含绘制位移）：用于 2D 让位判定（比较中心）与视口钳制
+    val blockRects = remember { mutableStateMapOf<HomeCard, Rect>() }
     // 松手后进入"归位动画"阶段的卡片：视觉上仍按被抬起渲染，直到位移回零
     var settlingCard by remember { mutableStateOf<HomeCard?>(null) }
     val activeCard: HomeCard? = draggingCard ?: settlingCard
 
     // ---------------- 拖拽辅助：列表状态 / 可视区边界 / 边缘自动滚动 ----------------
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val density = LocalDensity.current
     // 归位/换位时给一个轻微触感，强化"吸附"的体感
     val haptic = LocalHapticFeedback.current
-    var listTopInRoot by remember { mutableStateOf(0f) }
-    var listBottomInRoot by remember { mutableStateOf(0f) }
+    var gridAreaLeftInRoot by remember { mutableStateOf(0f) }
+    var gridAreaTopInRoot by remember { mutableStateOf(0f) }
+    var gridAreaRightInRoot by remember { mutableStateOf(0f) }
+    var gridAreaBottomInRoot by remember { mutableStateOf(0f) }
     // 每帧滚动像素（带符号）：>0 向下滚、<0 向上滚；数值由指针贴近边缘的程度决定
     var autoScrollStep by remember { mutableStateOf(0f) }
     // 最近的指针绝对 Y：手指停在边缘不动时没有新的拖动事件，滚动循环要靠它复算
@@ -197,76 +204,81 @@ fun HomeScreen(
      * 位移会单方面累加（滚动补偿）而卡片永远不落位 → 卡片被推出可视区、界面只剩空白。
      */
     fun settleDrag(card: HomeCard, pointerRootY: Float) {
-        // ① 让位判定：**位移越过邻块整块高度**才让位（等价于"被拖卡片中心越过邻块中心"）。
-        //    这样其余卡片不会提前让位；且恰在 offset≈邻块高 时触发，换位后残差≈0，不会来回跳。
-        //    用 while 连续跨越：高速拖动时一帧可能跨过多个区块。
-        while (true) {
-            val index = cardOrder.indexOf(card)
-            if (index < 0) return
-            val nextHeight =
-                if (index < cardOrder.lastIndex) (blockHeights[cardOrder[index + 1]] ?: 0).toFloat() else 0f
-            val prevHeight =
-                if (index > 0) (blockHeights[cardOrder[index - 1]] ?: 0).toFloat() else 0f
-            when (HomeDragRules.swapDirection(dragOffsetY, nextHeight, prevHeight)) {
-                1 -> {
-                    viewModel.moveCard(index, index + 1)
-                    dragOffsetY -= nextHeight
-                }
-
-                -1 -> {
-                    viewModel.moveCard(index, index - 1)
-                    dragOffsetY += prevHeight
-                }
-
-                else -> break
-            }
-        }
-
-        // ③ 钳制（"拖到边缘卡片消失"的修复）
-        //    a. **逻辑位移**只受"不超过卡片自身高度"约束 → 槽位与视觉位置不脱节，槽位不会被列表回收；
-        //       逻辑位移是驱动"换位判定 + 自动滚动补偿"的唯一来源，**绝不能被视口钳制改写**。
-        //    b. 视口钳制只生成**渲染位移**：保证可见矩形留在可视区内，但不参与任何判定 ——
-        //       这样既不会误触相邻卡片换位，也不会压住自动滚动的位移补偿（即"卡住"）。
-        val cardHeight = (blockHeights[card] ?: 0).toFloat()
-        val idxNow = cardOrder.indexOf(card)
-        val nextH = if (idxNow in 0 until cardOrder.lastIndex) (blockHeights[cardOrder[idxNow + 1]] ?: 0).toFloat() else 0f
-        val prevH = if (idxNow > 0) (blockHeights[cardOrder[idxNow - 1]] ?: 0).toFloat() else 0f
-        // 上限 = max(卡片自身高, 相邻两块高)：既保证"整块让位"阈值可达，又不过度偏离槽位
-        dragOffsetY = HomeDragRules.clampOffset(dragOffsetY, maxOf(cardHeight, nextH, prevH))
-
-        // 磁性吸附：位移很小时视觉上"吸"回槽位（**只作用于渲染位移**，不影响判定，慢速拖动也能累加）
-        val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
-        val magnetized = if (kotlin.math.abs(dragOffsetY) < snapZone) 0f else dragOffsetY
-
-        val visualTop = blockVisualTops[card]
-        renderOffsetY = if (cardHeight > 0f && visualTop != null) {
-            HomeDragRules.clampToViewport(
-                offset = magnetized,
-                visualTop = visualTop,
-                height = cardHeight,
-                listTop = listTopInRoot,
-                listBottom = listBottomInRoot
-            )
-        } else {
-            magnetized
-        }
-
-        // ③ 边缘自动滚动：指针进入上/下 96dp 感应区后逐帧滚动，越靠边越快（2dp → 16dp/帧）。
-        //    已在队首/队尾且仍要往外拖时**停止滚动**：此时没有可交换的位置，
-        //    继续滚只会让卡片脱离自己的槽位。
         val index = cardOrder.indexOf(card)
+        val rect = blockRects[card]
+        if (index < 0 || rect == null) return
+
+        // ① 让位判定（2D）：被拖卡片**中心**越过相邻卡片中心才让位 ——
+        //    等价于"真正悬停到目标位置"，因此不会提前让位、不会来回跳；
+        //    同行比较横向、异行比较纵向，所以网格里左右移动只会左右换位，不会跑到上下行。
+        val visualCenter = HomeDragRules.CellCenter(
+            rect.center.x + dragOffset.x,
+            rect.center.y + dragOffset.y
+        )
+        val nextRect = cardOrder.getOrNull(index + 1)?.let { blockRects[it] }
+        val prevRect = cardOrder.getOrNull(index - 1)?.let { blockRects[it] }
+        // "是否同一行"由**槽位矩形**判定（顶部对齐即同行），不能靠中心距离猜
+        val rowEps = maxOf(rect.height * 0.5f, 1f)
+        val direction = HomeDragRules.gridSwapDirection(
+            dragged = visualCenter,
+            next = nextRect?.let { HomeDragRules.CellCenter(it.center.x, it.center.y) },
+            prev = prevRect?.let { HomeDragRules.CellCenter(it.center.x, it.center.y) },
+            nextSameRow = nextRect != null && kotlin.math.abs(nextRect.top - rect.top) < rowEps,
+            prevSameRow = prevRect != null && kotlin.math.abs(prevRect.top - rect.top) < rowEps
+        )
+        if (direction != 0) {
+            val targetRect = if (direction > 0) nextRect!! else prevRect!!
+            val targetIndex = index + direction
+            viewModel.moveCard(index, targetIndex)
+            // 视觉连续：卡片槽位整体挪到了邻卡的位置，位移里扣掉这段槽距
+            dragOffset -= (targetRect.topLeft - rect.topLeft)
+        }
+
+        // ② 钳制（保证"卡片不会被推出可视区而消失"）
+        //    a. 逻辑位移：每轴不超过 max(自身尺寸, 相邻卡片同轴尺寸) → 保证让位阈值可达，又不过度偏离槽位；
+        //       逻辑位移是让位与滚动补偿的唯一来源，**绝不被视口钳制改写**。
+        //    b. 渲染位移：把可见矩形收进可视区（每轴独立钳制），只影响绘制。
+        val limitX = maxOf(rect.width, nextRect?.width ?: 0f, prevRect?.width ?: 0f)
+        val limitY = maxOf(rect.height, nextRect?.height ?: 0f, prevRect?.height ?: 0f)
+        dragOffset = Offset(
+            HomeDragRules.clampOffset(dragOffset.x, limitX),
+            HomeDragRules.clampOffset(dragOffset.y, limitY)
+        )
+
+        // 磁性吸附：位移很小时视觉上"吸"回槽位（只作用于渲染位移，不影响判定）
+        val snapZone = with(density) { HOME_SNAP_ZONE.toPx() }
+        val magnetX = if (kotlin.math.abs(dragOffset.x) < snapZone) 0f else dragOffset.x
+        val magnetY = if (kotlin.math.abs(dragOffset.y) < snapZone) 0f else dragOffset.y
+        renderOffset = Offset(
+            HomeDragRules.clampToViewport(
+                offset = magnetX,
+                visualTop = rect.left + magnetX,
+                height = rect.width,
+                listTop = gridAreaLeftInRoot,
+                listBottom = gridAreaRightInRoot
+            ),
+            HomeDragRules.clampToViewport(
+                offset = magnetY,
+                visualTop = rect.top + magnetY,
+                height = rect.height,
+                listTop = gridAreaTopInRoot,
+                listBottom = gridAreaBottomInRoot
+            )
+        )
+
+        // ③ 边缘自动滚动（纵向）：指针进入可视区上/下 1/4 区域即开始滚动，越靠边越快。
+        //    已在队首/队尾且仍要往外拖时停止滚动（没有可交换的位置）。
         val canScrollUp = index > 0
         val canScrollDown = index < cardOrder.lastIndex
-        // 感应区 = 可视区高度 × 1/4（有下限兜底）：进入上下各 1/4 区域就开始滚动
-        val viewportHeight = (listBottomInRoot - listTopInRoot).coerceAtLeast(0f)
+        val viewportHeight = (gridAreaBottomInRoot - gridAreaTopInRoot).coerceAtLeast(0f)
         val zonePx = maxOf(
             viewportHeight * HOME_EDGE_ZONE_RATIO,
             with(density) { HOME_EDGE_SCROLL_ZONE_MIN.toPx() }
         )
         autoScrollStep = HomeDragRules.autoScrollStep(
             pointerRootY = pointerRootY,
-            listTop = listTopInRoot,
-            listBottom = listBottomInRoot,
+            listTop = gridAreaTopInRoot,
+            listBottom = gridAreaBottomInRoot,
             zone = zonePx,
             minStep = with(density) { HOME_EDGE_SCROLL_MIN.toPx() },
             maxStep = with(density) { HOME_EDGE_SCROLL_MAX.toPx() },
@@ -278,20 +290,20 @@ fun HomeScreen(
     // 松手吸附：不在合法槽位时**平滑**回到最近合法槽位（即位移回零），结束后无任何残留偏移
     LaunchedEffect(settlingCard) {
         val card = settlingCard ?: return@LaunchedEffect
-        val from = renderOffsetY
-        dragOffsetY = 0f // 逻辑位移已无用，先归零避免下一次拖动残留
-        if (from != 0f) {
+        val from = renderOffset
+        dragOffset = Offset.Zero // 逻辑位移已无用，先归零避免下一次拖动残留
+        if (from != Offset.Zero) {
             // 弹簧回弹：比匀速 tween 更有"咔哒"落位感
-            Animatable(from).animateTo(
-                targetValue = 0f,
+            Animatable(from, Offset.VectorConverter).animateTo(
+                targetValue = Offset.Zero,
                 animationSpec = spring(
                     dampingRatio = Spring.DampingRatioMediumBouncy,
                     stiffness = Spring.StiffnessMedium
                 )
-            ) { renderOffsetY = value }
+            ) { renderOffset = value }
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
-        renderOffsetY = 0f
+        renderOffset = Offset.Zero
         settlingCard = null
     }
 
@@ -301,10 +313,10 @@ fun HomeScreen(
             val step = autoScrollStep
             val card = draggingCard
             if (step != 0f && card != null) {
-                val consumed = listState.scrollBy(step)
+                val consumed = gridState.scrollBy(step)
                 if (consumed != 0f) {
-                    // 列表滚了，位移要跟着补，卡片才不脱手
-                    dragOffsetY += consumed
+                    // 列表滚了，位移要跟着补（只补纵向），卡片才不脱手
+                    dragOffset += Offset(0f, consumed)
                     // 关键修复：滚动后立刻复算「是否该换位」。
                     // 手指停在边缘不动时没有拖动事件，若不复算，位移会一直累加而卡片永不落位，
                     // 表现为卡片被推出可视区、只剩空白。
@@ -316,9 +328,9 @@ fun HomeScreen(
         autoScrollStep = 0f
     }
 
-    /** 拖动位移入口：累加位移并记住指针位置，随后交给 [settleDrag] 做换位与自动滚动判定。 */
-    fun onBlockDrag(card: HomeCard, deltaY: Float, pointerRootY: Float) {
-        dragOffsetY += deltaY
+    /** 拖动位移入口：累加 2D 位移并记住指针位置，随后交给 [settleDrag] 做让位与自动滚动判定。 */
+    fun onBlockDrag(card: HomeCard, deltaX: Float, deltaY: Float, pointerRootY: Float) {
+        dragOffset += Offset(deltaX, deltaY)
         dragPointerRootY = pointerRootY
         settleDrag(card, pointerRootY)
     }
@@ -348,26 +360,30 @@ fun HomeScreen(
         }
     )
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(
-            state = listState,
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(HOME_GRID_COLUMNS),
+            state = gridState,
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth()
                 .widthIn(max = 720.dp)
                 .onGloballyPositioned { coords ->
-                    // 记录可视区上下边界（根坐标），供边缘自动滚动判断
-                    val top = coords.localToRoot(Offset.Zero).y
-                    val bottom = top + coords.size.height
-                    if (top != listTopInRoot) listTopInRoot = top
-                    if (bottom != listBottomInRoot) listBottomInRoot = bottom
+                    // 记录可视区四边（根坐标）：纵向用于边缘自动滚动，双轴用于视口钳制
+                    val origin = coords.localToRoot(Offset.Zero)
+                    val right = origin.x + coords.size.width
+                    val bottom = origin.y + coords.size.height
+                    if (origin.x != gridAreaLeftInRoot) gridAreaLeftInRoot = origin.x
+                    if (origin.y != gridAreaTopInRoot) gridAreaTopInRoot = origin.y
+                    if (right != gridAreaRightInRoot) gridAreaRightInRoot = right
+                    if (bottom != gridAreaBottomInRoot) gridAreaBottomInRoot = bottom
                 }
                 // 编辑布局时关闭下拉刷新：拖拽是纵向手势，否则极易误触刷新
                 .pullRefresh(pullState, enabled = !layoutEditing && draggingCard == null),
-            // 统一垂直节奏：区块间距一律 FeiQiSpacing.lg，不再由各区块自己加 Spacer
+            // 统一行距；两列瓷砖之间的间距由卡片自身 16dp 内边距提供
             verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.lg),
             contentPadding = PaddingValues(bottom = FeiQiSpacing.xl)
         ) {
-        item {
+        item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -393,7 +409,8 @@ fun HomeScreen(
                             layoutEditing = !layoutEditing
                             // 退出编辑模式时清掉拖动中间态，避免残留位移影响渲染
                             draggingCard = null
-                            dragOffsetY = 0f
+                            dragOffset = Offset.Zero
+                            renderOffset = Offset.Zero
                         }
                     ) {
                         Text(
@@ -412,7 +429,7 @@ fun HomeScreen(
             }
         }
 
-        item {
+        item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
             Text(
                 text = stringResource(R.string.home_headline),
                 style = MaterialTheme.typography.headlineLarge,
@@ -423,7 +440,7 @@ fun HomeScreen(
 
         // ---------------- 可排序区块：顺序由 HomeCard 顺序决定（默认顺序见 HomeCard.DEFAULT_ORDER） ----------------
         if (layoutEditing) {
-            item {
+            item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -448,15 +465,19 @@ fun HomeScreen(
             }
         }
 
-        items(cardOrder, key = { it.id }) { card ->
+        items(
+            items = cardOrder,
+            key = { it.id },
+            span = { card -> GridItemSpan(card.span) }
+        ) { card ->
             HomeBlock(
                 card = card,
                 editing = layoutEditing,
                 dragging = activeCard == card,
-                dragOffsetY = if (activeCard == card) renderOffsetY else 0f,
-                onBoundsMeasured = { top, h ->
-                    if (blockHeights[card] != h) blockHeights[card] = h
-                    if (blockVisualTops[card] != top) blockVisualTops[card] = top
+                dragOffset = if (activeCard == card) renderOffset else Offset.Zero,
+                onBoundsMeasured = { left, top, w, h ->
+                    val rect = Rect(left, top, left + w, top + h)
+                    if (blockRects[card] != rect) blockRects[card] = rect
                 },
                 // 非被拖卡片在重排时平滑滑到新位置（被拖卡片用 offset 跟手，不加动画以免打架）
                 modifier = if (activeCard == card) Modifier else Modifier.animateItemPlacement(
@@ -464,10 +485,10 @@ fun HomeScreen(
                 ),
                 onDragStart = {
                     draggingCard = card
-                    dragOffsetY = 0f
-                    renderOffsetY = 0f
+                    dragOffset = Offset.Zero
+                    renderOffset = Offset.Zero
                 },
-                onDragDelta = { delta, pointerY -> onBlockDrag(card, delta, pointerY) },
+                onDragDelta = { dx, dy, pointerY -> onBlockDrag(card, dx, dy, pointerY) },
                 onDragEnd = {
                     // 松手后若仍有位移（未落在合法槽位），进入平滑归位动画；
                     // 动画由 LaunchedEffect(settlingCard) 负责，结束后位移必为 0
@@ -475,8 +496,8 @@ fun HomeScreen(
                     draggingCard = null
                     autoScrollStep = 0f
                     dragPointerRootY = 0f
-                    dragOffsetY = 0f
-                    if (card != null) settlingCard = card else renderOffsetY = 0f
+                    dragOffset = Offset.Zero
+                    if (card != null) settlingCard = card else renderOffset = Offset.Zero
                 }
             ) {
                 when (card) {
@@ -758,30 +779,52 @@ private fun LifeIndexCard(score: Int, desc: String, modifier: Modifier = Modifie
         colors = CardDefaults.cardColors(containerColor = Primary),
         shape = RoundedCornerShape(20.dp)
     ) {
-        Row(
+        // 响应式：半宽瓷砖（网格 1 列）时改为上下排布，环在上、文案在下，避免被挤扁
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(FeiQiSpacing.lg),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(FeiQiSpacing.md)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.life_index),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = OnPrimary.copy(alpha = 0.8f)
-                )
-                Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
-                Text(
-                    text = desc,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = OnPrimary.copy(alpha = 0.9f),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
+            if (maxWidth < 200.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    ScoreRing(score = score, modifier = Modifier.size(84.dp))
+                    Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
+                    Text(
+                        text = stringResource(R.string.life_index),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = OnPrimary.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(FeiQiSpacing.xs))
+                    Text(
+                        text = desc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = OnPrimary.copy(alpha = 0.9f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.life_index),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = OnPrimary.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
+                        Text(
+                            text = desc,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = OnPrimary.copy(alpha = 0.9f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(FeiQiSpacing.lg))
+                    // 数据可视化：环形进度（分数变化时缓动；中心显示分值）
+                    ScoreRing(score = score, modifier = Modifier.size(96.dp))
+                }
             }
-            Spacer(modifier = Modifier.width(FeiQiSpacing.lg))
-            // 数据可视化：环形进度（分数变化时缓动；中心显示分值）
-            ScoreRing(score = score, modifier = Modifier.size(96.dp))
         }
     }
 }

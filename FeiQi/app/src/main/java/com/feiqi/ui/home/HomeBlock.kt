@@ -55,22 +55,21 @@ import kotlin.math.roundToInt
  * - 区块被描边+浅底色框出来，让"可移动单位"一目了然；
  * - 正在拖动的区块浮到最上层、跟随手指位移并带阴影。
  *
- * 位移只作用在**视觉层**（[Modifier.offset]），不改变测量尺寸，因此
- * [onBoundsMeasured] 汇报的尺寸/位置只反映布局结果（不含缩放），可用于相邻交换阈值与视口钳制。
+ * 位移只作用在**绘制层**（`graphicsLayer.translation`）—— 不触发重新布局，因此
+ * [onBoundsMeasured] 汇报的是**布局矩形**（不含位移），父层按"布局矩形 + 渲染位移"得到可见矩形。
  *
- * @param onBoundsMeasured 上报本区块的**可见矩形顶部（根坐标，含拖拽位移）与高度**：
- *   高度用于"拖过一半就交换"，顶部用于"把卡片钳在可视区内"（防止拖到边缘被裁掉）。
+ * @param onBoundsMeasured 上报本区块的布局矩形（根坐标：left、top、宽、高）。
+ * @param onDragDelta 参数：本次位移（x、y，像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。
  */
 @Composable
 internal fun HomeBlock(
     card: HomeCard,
     editing: Boolean,
     dragging: Boolean,
-    dragOffsetY: Float,
-    onBoundsMeasured: (top: Float, height: Int) -> Unit,
+    dragOffset: Offset,
+    onBoundsMeasured: (left: Float, top: Float, width: Int, height: Int) -> Unit,
     onDragStart: () -> Unit,
-    /** 参数：本次位移（像素）、指针在根坐标系中的 Y（供边缘自动滚动判断）。 */
-    onDragDelta: (Float, Float) -> Unit,
+    onDragDelta: (deltaX: Float, deltaY: Float, pointerRootY: Float) -> Unit,
     onDragEnd: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
@@ -112,11 +111,14 @@ internal fun HomeBlock(
         modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { coords ->
-                onBoundsMeasured(coords.localToRoot(Offset.Zero).y, coords.size.height)
+                val pos = coords.localToRoot(Offset.Zero)
+                onBoundsMeasured(pos.x, pos.y, coords.size.width, coords.size.height)
             }
             .zIndex(if (dragging) 1f else 0f)
-            .offsetY(if (dragging) dragOffsetY else 0f)
+            // 位移与缩放都走绘制层：拖动期间不触发重新布局（性能专项）
             .graphicsLayer {
+                translationX = if (dragging) dragOffset.x else 0f
+                translationY = if (dragging) dragOffset.y else 0f
                 scaleX = liftScale
                 scaleY = liftScale
             }
@@ -144,29 +146,42 @@ internal fun HomeBlock(
                 Icon(
                     imageVector = Icons.Default.Menu,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // 固定卡片：手柄置灰表示不可拖动
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        .copy(alpha = if (card.draggable) 1f else 0.35f),
                     modifier = Modifier
                         .size(40.dp)
                         .padding(8.dp)
                         .onGloballyPositioned { handleTopInRoot = it.localToRoot(Offset.Zero).y }
                         // 手柄独占拖动：不影响区块内部卡片的点击与列表滚动
-                        .pointerInput(card) {
-                            detectDragGestures(
-                                onDragStart = { onDragStart() },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    // 指针绝对 Y = 手柄根坐标 + 指针在手柄内的局部 Y
-                                    onDragDelta(dragAmount.y, handleTopInRoot + change.position.y)
-                                },
-                                onDragEnd = { onDragEnd() },
-                                onDragCancel = { onDragEnd() }
-                            )
-                        }
+                        .then(
+                            if (card.draggable) {
+                                Modifier.pointerInput(card) {
+                                    detectDragGestures(
+                                        onDragStart = { onDragStart() },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            // 指针绝对 Y = 手柄根坐标 + 指针在手柄内的局部 Y
+                                            onDragDelta(
+                                                dragAmount.x,
+                                                dragAmount.y,
+                                                handleTopInRoot + change.position.y
+                                            )
+                                        },
+                                        onDragEnd = { onDragEnd() },
+                                        onDragCancel = { onDragEnd() }
+                                    )
+                                }
+                            } else {
+                                Modifier
+                            }
+                        )
                 )
                 Text(
-                    text = card.displayName(),
+                    text = if (card.draggable) card.displayName() else card.displayName() + " · 固定",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                        .copy(alpha = if (card.draggable) 1f else 0.6f)
                 )
             }
         }
@@ -175,12 +190,6 @@ internal fun HomeBlock(
         content()
     }
 }
-
-/** 竖直位移包装（保持可读性，避免在链式调用里散落 IntOffset 换算）。 */
-private fun Modifier.offsetY(value: Float): Modifier =
-    this.then(
-        Modifier.offset { IntOffset(x = 0, y = value.roundToInt()) }
-    )
 
 /** 编辑模式下展示的区块名（与文案资源解耦，便于快速识别）。 */
 internal fun HomeCard.displayName(): String = when (this) {

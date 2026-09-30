@@ -18,23 +18,52 @@ internal object HomeDragRules {
         if (cardHeight <= 0f) 0f else offset.coerceIn(-cardHeight, cardHeight)
 
     /**
-     * 让位判定：**位移超过邻块整块高度**才让位。
-     *
-     * 这正是"被拖卡片中心越过邻块中心"的等价条件（`slotTop + offset + d/2 > slotTop + n + d/2` → `offset > n`），
-     * 与两张卡片各自的高度无关。相比"半块高度"：
-     * - 让位更**晚**：被拖卡片必须真正悬停到目标位置，其余卡片才让开 → 不会提前让位；
-     * - 换位后位移残差 ≈ 0（因为恰好在 offset ≈ n 时触发）→ 不跳动；
-     * - 反向让位需再走一整块 → 天然滞回，不会在临界点来回换位。
-     *
-     * @param offset 当前位移（像素，正 = 向下）
-     * @param nextHeight 下方邻块高度；0 表示没有（已到队尾）
-     * @param prevHeight 上方邻块高度；0 表示没有（已到队首）
-     * @return +1 与下方邻块交换、-1 与上方邻块交换、0 不动
+     * 卡片中心点（屏幕坐标）。用普通数据类而不是 Compose 的 `Offset`，
+     * 让规则层与 UI 解耦、可直接单测。
      */
-    fun swapDirection(offset: Float, nextHeight: Float, prevHeight: Float): Int = when {
-        nextHeight > 0f && offset > nextHeight -> 1
-        prevHeight > 0f && -offset > prevHeight -> -1
-        else -> 0
+    data class CellCenter(val x: Float, val y: Float)
+
+    /**
+     * 网格让位判定（**2D 版**）：被拖卡片中心**越过相邻卡片中心**才让位。
+     *
+     * 「越过」的含义：
+     * - 纵向上被拖中心已明显低于邻卡中心（超过 [rowTolerance]）→ 视为跨行越过；或
+     * - 与邻卡处于同一行（纵向差在 [rowTolerance] 内）且横向上已在其右侧 → 视为同行越过。
+     *
+     * 2D 判定让"网格里左右移动"与"上下换行"都正确：左右拖只会在同行内左右换位，
+     * 不会莫名跑到上下行；上下拖跨行时再按行比较。
+     *
+     * 与旧版"位移 > 邻块整块高度"是同一语义的推广（等行等高的两卡，两者等价），
+     * 因此仍满足"不提前让位、换位后不来回跳"。
+     *
+     * @param dragged 被拖卡片**当前可见中心**（含拖拽位移）
+     * @param next 下一张卡片的中心（已到队尾时传 null）
+     * @param prev 上一张卡片的中心（已到队首时传 null）
+     * @param nextSameRow 下一张是否与**被拖卡片的槽位**同一行（由父层用槽位矩形判定，不能靠中心距离猜）
+     * @param prevSameRow 上一张是否与被拖卡片的槽位同一行
+     * @return +1 与下一张交换、-1 与上一张交换、0 不动
+     */
+    fun gridSwapDirection(
+        dragged: CellCenter,
+        next: CellCenter?,
+        prev: CellCenter?,
+        nextSameRow: Boolean,
+        prevSameRow: Boolean
+    ): Int {
+        fun passed(target: CellCenter, sameRow: Boolean): Boolean =
+            if (sameRow) {
+                // 同一行：比横向（左右拖动只会在同行内左右换位，不会跑到上下行）
+                dragged.x > target.x
+            } else {
+                // 不同行：比纵向（被拖中心更低才算越过）
+                dragged.y > target.y
+            }
+
+        return when {
+            next != null && passed(next, nextSameRow) -> 1
+            prev != null && !passed(prev, prevSameRow) -> -1
+            else -> 0
+        }
     }
 
     /**

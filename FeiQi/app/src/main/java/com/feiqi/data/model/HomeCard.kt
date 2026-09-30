@@ -20,9 +20,22 @@ package com.feiqi.data.model
  * 都由 `HomeViewModel` 的 `uiState` 独立提供，**不依赖自己在列表中的位置**，
  * 因此任意顺序下交互行为完全一致（这条是「布局调整后功能仍正确」的实现前提）。
  */
-enum class HomeCard(val id: String) {
-    LIFE_INDEX("life_index"),
-    STATS("stats"),
+enum class HomeCard(
+    val id: String,
+    /**
+     * 在首页网格中占几列（首页固定 2 列）：
+     * 1 = 半宽瓷砖（可与相邻的 1 列卡片并排），2 = 整行。
+     * 小卡片（生活指数、数据概览）用 1；列表类区块用 2，避免被压成半宽难以阅读。
+     */
+    val span: Int = 2,
+    /**
+     * 是否可拖动排序。为 false 时该卡片是「固定卡片」：
+     * 编辑模式下不显示拖动手柄、不参与让位（其他卡片会跨过它移动）。
+     */
+    val draggable: Boolean = true
+) {
+    LIFE_INDEX("life_index", span = 1),
+    STATS("stats", span = 1),
     TODAY_TODO("today_todo"),
     SHOPPING("shopping"),
     MEDIA("media"),
