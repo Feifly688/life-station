@@ -63,11 +63,16 @@ data class Schedule(
     /**
      * 统一的「是否应**自动移入已完成区**」判定（仅对**未完成**条目调用）：
      * - **只有「当日结束仍未完成」（跨日）才移区**；当天过了提醒时间**不移区**，只标 [isPastDue]；
+     * - **曾被完成过的一律不再自动归档**（`completedDate != null`）：用户主动取消勾选把条目拉回来后，
+     *   它应当留在待办区继续处理，而不是因为"日期已过"被立刻弹回已完成区；
      * - 单条日程（listId == null）：需开启提醒（沿用"无提醒不判逾期"）；
      * - 清单条目（listId != null）：只看到期日 [isDeadlineOverdue]。
      */
-    fun isExpired(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean =
-        if (listId == null) reminder && date < today else date < today
+    fun isExpired(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean {
+        // 曾完成过（取消勾选时会保留 completedDate）→ 视为用户主动接管，不再自动归档
+        if (completed || completedDate != null) return false
+        return if (listId == null) reminder && date < today else date < today
+    }
 }
 
 data class ScheduleUiState(

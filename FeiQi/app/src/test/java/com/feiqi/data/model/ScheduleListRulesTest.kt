@@ -214,4 +214,31 @@ class ScheduleListRulesTest {
             completed.map { (it as ScheduleListItem.Single).schedule.title }
         )
     }
+
+    @Test
+    fun uncheckedPastList_returnsToPending_notToCompleted() {
+        // 用户场景：已完成里的「当日之前的清单」取消勾选 → 必须回到待完成区
+        val item = Schedule(
+            title = "条目", date = today.minusDays(2), listId = "L", listTitle = "清单",
+            completed = false, completedDate = today.minusDays(1) // 取消勾选后保留了完成日期
+        )
+        val group = ScheduleListItem.Group(
+            listId = "L", title = "清单", items = listOf(item), recurrence = Recurrence.NONE
+        )
+        val (active, completed) = ScheduleListRules.partition(listOf(group), today)
+        assertEquals("取消勾选的清单应回到待办区", 1, active.size)
+        assertTrue(completed.isEmpty())
+    }
+
+    @Test
+    fun neverCompletedPastList_isStillAutoArchived() {
+        // 对照：从未完成过的过期清单仍自动归档到已完成区
+        val item = Schedule(title = "条目", date = today.minusDays(2), listId = "L", listTitle = "清单")
+        val group = ScheduleListItem.Group(
+            listId = "L", title = "清单", items = listOf(item), recurrence = Recurrence.NONE
+        )
+        val (active, completed) = ScheduleListRules.partition(listOf(group), today)
+        assertTrue(active.isEmpty())
+        assertEquals(1, completed.size)
+    }
 }

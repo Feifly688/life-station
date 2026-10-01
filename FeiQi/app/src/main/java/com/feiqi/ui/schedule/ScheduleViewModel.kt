@@ -223,7 +223,9 @@ class ScheduleViewModel(
         val repeatingSingle = schedule.listId == null && schedule.reminder && schedule.isRecurring
         val updated = schedule.copy(
             completed = markCompleted,
-            completedDate = if (markCompleted) today else null,
+            // 取消勾选时**保留** completedDate：它标记"曾完成过"，
+            // 让已跨日的条目回到待办区后不再被自动归档（否则会立刻弹回已完成区）。
+            completedDate = if (markCompleted) today else schedule.completedDate,
             // 完成时若应完成时刻已过 → 记为「过期后补完成」；取消完成则清掉标记。
             completedLate = if (markCompleted) schedule.isPastDue(today) else false,
             // 完成记录不再循环（由副本负责继续），与「清单完成快照」的口径保持一致。
@@ -324,7 +326,8 @@ class ScheduleViewModel(
                     val updated = target.map {
                         it.copy(
                             completed = completed,
-                            completedDate = if (completed) today else null,
+                            // 取消勾选保留原 completedDate（"曾完成过"依据），避免清单被立刻弹回已完成区
+                            completedDate = if (completed) today else it.completedDate,
                             completedLate = if (completed) it.isPastDue(today) else false
                         )
                     }

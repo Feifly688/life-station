@@ -141,4 +141,22 @@ class ScheduleTest {
         // 清单条目：今天 → 不过期
         assertFalse(item.copy(date = t).isExpired(t))
     }
+
+    @Test
+    fun previouslyCompleted_doesNotAutoMoveAgain() {
+        val t = LocalDate.of(2026, 9, 25)
+        // 曾完成过（保留了 completedDate）、当前未完成、日期已过 → 不再自动归档（留在待办区）
+        val listItem = Schedule(
+            title = "拉回来的清单条", date = t.minusDays(3), listId = "L",
+            completed = false, completedDate = t.minusDays(1)
+        )
+        assertFalse(listItem.isExpired(t))
+        val single = Schedule(
+            title = "拉回来的单条", date = t.minusDays(3), reminder = true,
+            completed = false, completedDate = t.minusDays(1)
+        )
+        assertFalse(single.isExpired(t))
+        // 对照：从未完成过的过期条目仍会自动归档
+        assertTrue(Schedule(title = "从未完成", date = t.minusDays(3), listId = "L").isExpired(t))
+    }
 }
