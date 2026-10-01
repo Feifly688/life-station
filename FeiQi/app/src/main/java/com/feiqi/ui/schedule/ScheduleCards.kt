@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.Card
@@ -175,14 +176,14 @@ internal fun SingleScheduleCard(
     modifier: Modifier = Modifier
 ) {
     val today = DateUtils.today()
-    // 未完成 → 统一过期口径（单条=按提醒、清单条目=按截止日），用于红色底与「已过期」标签；
+    // 未完成 → 「已过应完成时刻」即在待办区标红（当天过了提醒时间也标，但**不移区**）；
     // 已完成 → 只看「过期后补完成」标记：补打卡不会抹掉标签，按时完成也不会被误标过期。
-    val uncompletedExpired = !schedule.completed && schedule.isExpired(today)
-    val showOverdue = if (schedule.completed) schedule.completedLate else uncompletedExpired
+    val uncompletedPastDue = !schedule.completed && schedule.isPastDue(today)
+    val showOverdue = if (schedule.completed) schedule.completedLate else uncompletedPastDue
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (uncompletedExpired && !selectionMode) CardRed else MaterialTheme.colorScheme.surface
+            containerColor = if (uncompletedPastDue && !selectionMode) CardRed else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(16.dp)
@@ -230,34 +231,60 @@ internal fun SingleScheduleCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                if (showOverdue) {
-                    Text(
-                        text = stringResource(R.string.overdue),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ExpenseRed
-                    )
-                }
             }
+            // 右侧信息行：「时间 · 已过期 · 🔔」（v1.13.0 起统一到同一行，与卡片封面一致）
             Column(horizontalAlignment = Alignment.End) {
-                // 日期与时间合成一行：当天显示「今天 14:30」，非当天显示「9月26日 14:30」。
-                Text(
-                    text = DateUtils.dateTimeLabel(schedule.date, schedule.time),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 if (schedule.completed) {
-                    schedule.completedDate?.let {
-                        Text(
-                            text = stringResource(R.string.list_completed_date, DateUtils.relativeDate(it)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // 已完成：不再显示「完成于 X」——
+                    // 未设置提醒 → 不显示任何内容；设置了提醒 → 只显示当初的提醒时间。
+                    if (schedule.reminder && schedule.time != null) {
+                        ScheduleInfoLine(
+                            text = DateUtils.dateWithTime(schedule.date, schedule.time),
+                            overdue = schedule.completedLate,
+                            withBell = true
                         )
                     }
+                } else {
+                    ScheduleInfoLine(
+                        text = DateUtils.dateTimeLabel(schedule.date, schedule.time),
+                        overdue = uncompletedPastDue,
+                        withBell = schedule.reminder
+                    )
                 }
             }
             if (selectionMode) {
                 SelectionIndicator(selected = selected)
             }
+        }
+    }
+}
+
+/** 卡片右侧信息行：「时间 · 已过期 · 🔔」（单条与清单、已完成与未完成共用一套视觉）。 */
+@Composable
+private fun ScheduleInfoLine(text: String, overdue: Boolean, withBell: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (overdue) {
+            Text(
+                text = stringResource(R.string.overdue),
+                style = MaterialTheme.typography.labelSmall,
+                color = ExpenseRed
+            )
+        }
+        if (withBell) {
+            Icon(
+                imageVector = Icons.Default.Notifications,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(14.dp)
+            )
         }
     }
 }
@@ -282,7 +309,7 @@ internal fun ScheduleGroupCard(
 ) {
     val today = DateUtils.today()
     val hasOverdue = group.items.any {
-        if (it.completed) it.completedLate else it.isExpired(today)
+        if (it.completed) it.completedLate else it.isPastDue(today)
     }
     val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f, label = "arrow")
 
@@ -348,26 +375,21 @@ internal fun ScheduleGroupCard(
                     )
                     val recurrenceText = recurrenceLabel(group.recurrence)
                     val overdueText = stringResource(R.string.overdue)
-                    val completedDateText = group.items.firstNotNullOfOrNull { it.completedDate }?.let {
-                        stringResource(R.string.list_completed_date, DateUtils.relativeDate(it))
-                    }
-                    // 完成后附带当初设置的提醒时间（若有）
-                    val reminderTimeText = group.items.firstNotNullOfOrNull { if (it.reminder) it.time else null }?.let {
-                        DateUtils.hm(it)
-                    }
+                    // 已完成清单：不再显示「完成于 X」；只有设置了提醒时显示其提醒时间
+                    val reminderText = group.items
+                        .firstOrNull { it.reminder && it.time != null }
+                        ?.let { DateUtils.dateWithTime(it.date, it.time) }
                     val subInfo = remember(
                         group,
                         hasOverdue,
                         recurrenceText,
                         overdueText,
-                        completedDateText,
-                        reminderTimeText,
+                        reminderText,
                         isCompleted
                     ) {
                         val parts = mutableListOf<String>()
                         if (isCompleted) {
-                            completedDateText?.let { parts += it }
-                            reminderTimeText?.let { parts += it }
+                            reminderText?.let { parts += it }
                         } else {
                             group.items.filter { !it.completed }.minByOrNull { it.date }?.let { near ->
                                 parts += DateUtils.dateTimeLabel(near.date, near.time)

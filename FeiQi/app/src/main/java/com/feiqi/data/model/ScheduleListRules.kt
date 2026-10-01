@@ -17,7 +17,11 @@ object ScheduleListRules {
      * 由 [partition] 依据「整张清单是否过期」决定它进入待办区还是已完成区。
      * （v1.8.0 曾把过期条目拆成单条，导致"取消勾选→拆成多条 / 逐条完成→重新组合"的抖动，已回退。）
      *
-     * @return 先单条、后清单组。
+     * 排序（v1.13.0 起）：
+     * - **待办区**：按**创建时间**倒序（最新添加的在最上）；
+     * - **已完成区**：按**完成时间**倒序；自动移入（无完成日期）的条目用其到期日参与排序。
+     *
+     * @return 按上述顺序排好的视图项（先待办区、后已完成区）。
      */
     fun buildItems(all: List<Schedule>): List<ScheduleListItem> {
         val (withList, singles) = all.partition { it.listId != null }
@@ -33,17 +37,42 @@ object ScheduleListRules {
             )
         }
 
-        val singleItems = singles.map { ScheduleListItem.Single(it) }
+        val items = singles.map { ScheduleListItem.Single(it) } + groups
 
-        val sortedGroups = groups.sortedWith(
-            compareByDescending<ScheduleListItem.Group> { !it.allCompleted }
-                .thenBy { it.items.firstOrNull()?.date ?: LocalDate.MAX }
+        val today = LocalDate.now()
+        return items.sortedWith(
+            // ① 待办区在前、已完成区在后
+            compareBy<ScheduleListItem> { if (it.pending(today)) 0 else 1 }
+                // ② 区内排序：待办按创建时间倒序；已完成按完成时间倒序
+                .thenByDescending {
+                    if (it.pending(today)) it.pendingSortKey() else it.completedSortKey()
+                }
+                // ③ 兜底：同一时间键时按 id 倒序（新建的在后）
+                .thenByDescending { it.maxId() }
         )
-        val sortedSingles = singleItems.sortedWith(
-            compareByDescending<ScheduleListItem.Single> { !it.schedule.completed }
-                .thenBy { it.schedule.date }
-        )
-        return sortedSingles + sortedGroups
+    }
+
+    /** 待办区排序键：条目**创建时间**（数值越大越新，排越前）。 */
+    private fun ScheduleListItem.pendingSortKey(): Long = when (this) {
+        is ScheduleListItem.Single -> schedule.createdAt
+        is ScheduleListItem.Group -> items.maxOf { it.createdAt }
+    }
+
+    /**
+     * 已完成区排序键：**完成时间**倒序。
+     * 自动移入已完成区的条目没有 [Schedule.completedDate]，用其**到期日**参与排序（保证同段可比）。
+     */
+    private fun ScheduleListItem.completedSortKey(): Long = when (this) {
+        is ScheduleListItem.Single ->
+            (schedule.completedDate ?: schedule.date).toEpochDay()
+
+        is ScheduleListItem.Group ->
+            (items.mapNotNull { it.completedDate }.maxOrNull() ?: items.maxOf { it.date }).toEpochDay()
+    }
+
+    private fun ScheduleListItem.maxId(): Long = when (this) {
+        is ScheduleListItem.Single -> schedule.id
+        is ScheduleListItem.Group -> items.maxOf { it.id }
     }
 
     /**

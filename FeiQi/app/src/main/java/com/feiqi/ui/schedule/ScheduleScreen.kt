@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.CheckBoxOutlineBlank
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -62,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -106,8 +108,10 @@ import com.feiqi.ui.components.rememberDeleteConfirm
 import com.feiqi.ui.theme.CardRed
 import com.feiqi.ui.theme.ExpenseRed
 import com.feiqi.ui.theme.OnPrimary
+import com.feiqi.ui.theme.OnSurfaceVariant
 import com.feiqi.ui.theme.Outline
 import com.feiqi.ui.theme.Primary
+import com.feiqi.ui.theme.SurfaceVariant
 import com.feiqi.utils.DateUtils
 import com.feiqi.utils.NotificationUtils
 import kotlinx.coroutines.delay
@@ -175,6 +179,8 @@ fun ScheduleScreen(
     var expandedDoneListIds by remember { mutableStateOf(setOf<String>()) }
     // 「已完成」区块默认展开（点标题可收起）。
     var completedExpanded by remember { mutableStateOf(true) }
+    // 待办搜索（按待办名 / 清单名模糊匹配）
+    var searchQuery by remember { mutableStateOf("") }
     var editingGroup by remember { mutableStateOf<ScheduleListItem.Group?>(null) }
     var editTarget by remember { mutableStateOf<EditTarget?>(null) }
 
@@ -221,7 +227,17 @@ fun ScheduleScreen(
     // 待办区 / 已完成区的划分规则收敛在 ScheduleListRules（纯函数 + 单测覆盖），
     // 这里只负责取值与渲染，规则调整不再需要改动本文件。
     val today = DateUtils.today()
-    val (activeItems, completedItems) = ScheduleListRules.partition(uiState.listItems, today)
+    val searchKeyword = searchQuery.trim()
+    val searching = searchKeyword.isNotEmpty()
+    // 搜索：按待办名称或清单名称模糊匹配（忽略大小写）；命中后仍按"待办区/已完成区"分区展示
+    val visibleItems = remember(uiState.listItems, searchKeyword) {
+        if (searchKeyword.isEmpty()) {
+            uiState.listItems
+        } else {
+            uiState.listItems.filter { it.matchesKeyword(searchKeyword) }
+        }
+    }
+    val (activeItems, completedItems) = ScheduleListRules.partition(visibleItems, today)
 
     val allItems = activeItems + completedItems
     val totalSelectable = allItems.size
@@ -293,12 +309,19 @@ fun ScheduleScreen(
                     }
                 )
             } else {
-                Text(
-                    text = stringResource(R.string.schedule_overview),
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.schedule_overview),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                    ScheduleSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onClear = { searchQuery = "" }
+                    )
+                }
             }
 
             LazyColumn(
@@ -310,16 +333,23 @@ fun ScheduleScreen(
             ) {
                 if (activeItems.isEmpty() && completedItems.isEmpty()) {
                     item {
-                        EmptyState(
-                            title = stringResource(R.string.schedule_empty_title),
-                            description = stringResource(R.string.schedule_empty_desc)
-                        )
+                        if (searching) {
+                            EmptyState(
+                                title = stringResource(R.string.schedule_search_empty_title),
+                                description = stringResource(R.string.schedule_search_empty_desc)
+                            )
+                        } else {
+                            EmptyState(
+                                title = stringResource(R.string.schedule_empty_title),
+                                description = stringResource(R.string.schedule_empty_desc)
+                            )
+                        }
                     }
                 } else {
                     items(activeItems, key = { itemKey(it) }) { item ->
                         ScheduleListItemCard(
                             item = item,
-                            expanded = item is ScheduleListItem.Group && item.listId !in collapsedListIds,
+                            expanded = item is ScheduleListItem.Group && (searching || item.listId !in collapsedListIds),
                             selectionMode = selectionMode,
                             selected = isSelected(item),
                             isCompleted = false,
@@ -372,7 +402,7 @@ fun ScheduleScreen(
                             ScheduleListItemCard(
                                 item = item,
                                 // 已完成区：清单卡片默认收起，点标题才展开。
-                                expanded = item is ScheduleListItem.Group && item.listId in expandedDoneListIds,
+                                expanded = item is ScheduleListItem.Group && (searching || item.listId in expandedDoneListIds),
                                 selectionMode = selectionMode,
                                 selected = isSelected(item),
                                 // 逾期未完成的清单也在已完成区，此时不应被当成"已完成"（否则标题划删除线、子项勾选框被禁用）
@@ -678,6 +708,64 @@ internal fun submitQuickAdd(
         Toast.makeText(context, context.getString(R.string.need_permission_toast), Toast.LENGTH_SHORT).show()
     }
     return true
+}
+
+/** 搜索匹配：待办标题或清单标题包含关键字（忽略大小写）。 */
+private fun ScheduleListItem.matchesKeyword(keyword: String): Boolean = when (this) {
+    is ScheduleListItem.Single -> schedule.title.contains(keyword, ignoreCase = true)
+    is ScheduleListItem.Group -> title.contains(keyword, ignoreCase = true) ||
+        items.any { it.title.contains(keyword, ignoreCase = true) }
+}
+
+/** 顶部待办搜索框：圆角浅底 + 放大镜 + 清空按钮（与应用其它输入框同一套视觉）。 */
+@Composable
+private fun ScheduleSearchBar(query: String, onQueryChange: (String) -> Unit, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(SurfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Search,
+            contentDescription = null,
+            tint = OnSurfaceVariant,
+            modifier = Modifier.size(18.dp)
+        )
+        Box(modifier = Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.schedule_search_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = OnSurfaceVariant
+                )
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                cursorBrush = SolidColor(Primary),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (query.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(R.string.schedule_search_clear),
+                tint = OnSurfaceVariant,
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable(onClick = onClear)
+            )
+        }
+    }
 }
 
 internal fun itemKey(item: ScheduleListItem): String = when (item) {

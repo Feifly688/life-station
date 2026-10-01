@@ -76,6 +76,14 @@ object DateUtils {
         return if (time != null && isNearTerm) "$label ${hm(time)}" else label
     }
 
+    /**
+     * 「9月22日 20:00」：**始终**带日期与时间（[relativeDate] 保留今天/昨天/明天）。
+     *
+     * 用于「已完成」条目展示当初设置的提醒时间（[dateTimeLabel] 只对今天/明天带时分，不适合这里）。
+     */
+    fun dateWithTime(date: LocalDate, time: LocalTime?): String =
+        if (time == null) relativeDate(date) else "${relativeDate(date)} ${hm(time)}"
+
     fun monthStart(date: LocalDate): LocalDate = date.withDayOfMonth(1)
 
     fun monthEnd(date: LocalDate): LocalDate = date.withDayOfMonth(date.lengthOfMonth())

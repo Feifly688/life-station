@@ -41,35 +41,33 @@ data class Schedule(
     val untimed: Boolean get() = time == null
 
     /**
-     * 是否「已过期（当天未按时）」：
-     * - 未开启提醒 → 不参与逾期判定（与既有口径一致）；
-     * - `date < today` → 过期（跨日仍未见完成）；
-     * - `date == today` 且设置了时间且当前已过该时刻 → 过期；
+     * 是否**已过应完成的时刻** —— 用于在**待办区**给条目标红「已过期」（不负责移区）：
+     * - `date < today` → 已过期（跨日仍未见完成）；
+     * - `date == today` 且设置了提醒时间且当前已过该时刻 → 已过期；
      * - 其余（含无时间的当天项）→ 未过期。
+     *
+     * 过了提醒时间**不再**把条目移入已完成区（见 [isExpired]），只是在原区域标记。
      *
      * @param today 判定基准日；[now] 判定时刻。两者默认取设备当前值，测试可显式传入。
      */
-    fun isOverdue(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean {
-        if (!reminder) return false
-        if (date < today) return true
-        return date == today && time != null && now > time
-    }
+    fun isPastDue(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean =
+        date < today || (date == today && time != null && now > time)
 
     /**
      * 清单条目的「过期」口径：**过了截止日（date < today）仍未完成**即视为已过期。
      *
-     * 与 [isOverdue] 的区别：**不看是否设了提醒、也不看当天具体时刻** ——
-     * 待办清单的"打卡"语义是"当天结束前勾掉"，所以只看日期是否已跨过。
+     * **不看是否设了提醒、也不看当天具体时刻** —— 待办清单的"打卡"语义是"当天结束前勾掉"。
      */
     fun isDeadlineOverdue(today: LocalDate = LocalDate.now()): Boolean = date < today
 
     /**
-     * 统一的「是否应归入已完成区并标『已过期』」判定（仅对**未完成**条目调用）：
-     * - 单条日程（listId == null）：沿用 [isOverdue]（需提醒 + 按时判定）；
-     * - 清单条目（listId != null）：用 [isDeadlineOverdue]（只看到期日）。
+     * 统一的「是否应**自动移入已完成区**」判定（仅对**未完成**条目调用）：
+     * - **只有「当日结束仍未完成」（跨日）才移区**；当天过了提醒时间**不移区**，只标 [isPastDue]；
+     * - 单条日程（listId == null）：需开启提醒（沿用"无提醒不判逾期"）；
+     * - 清单条目（listId != null）：只看到期日 [isDeadlineOverdue]。
      */
     fun isExpired(today: LocalDate = LocalDate.now(), now: LocalTime = LocalTime.now()): Boolean =
-        if (listId == null) isOverdue(today, now) else isDeadlineOverdue(today)
+        if (listId == null) reminder && date < today else date < today
 }
 
 data class ScheduleUiState(

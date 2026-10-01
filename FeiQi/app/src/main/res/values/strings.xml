@@ -78,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.12.0</string>
+    <string name="version_value">v1.13.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -91,7 +91,12 @@
     <string name="priority">优先级</string>
     <string name="remind_me">到时间提醒我</string>
     <string name="add_to_schedule">加入日程</string>
-    <string name="overdue">已逾期</string>
+    <!-- 逾期/过期标记：与需求文档和卡片封面一致，统一用「已过期」 -->
+    <string name="overdue">已过期</string>
+    <string name="schedule_search_hint">搜索待办或清单</string>
+    <string name="schedule_search_clear">清空搜索</string>
+    <string name="schedule_search_empty_title">没有找到匹配的待办</string>
+    <string name="schedule_search_empty_desc">换个关键词试试，或检查是否有错别字</string>
     <string name="next_7_days">未来 7 天</string>
     <string name="next_seven_days">接下来七天</string>
     <string name="planned">计划内</string>

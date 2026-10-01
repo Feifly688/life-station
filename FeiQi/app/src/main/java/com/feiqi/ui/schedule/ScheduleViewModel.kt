@@ -178,7 +178,7 @@ class ScheduleViewModel(
                 completed = true,
                 completedDate = today,
                 // 完成这一刻应完成时刻已过 → 快照保留「已过期」标签
-                completedLate = group.any { it.isExpired(today) },
+                completedLate = group.any { it.isPastDue(today) },
                 date = today,
                 recurrence = Recurrence.NONE, // 快照不再循环
                 lastResetDate = null,
@@ -225,7 +225,7 @@ class ScheduleViewModel(
             completed = markCompleted,
             completedDate = if (markCompleted) today else null,
             // 完成时若应完成时刻已过 → 记为「过期后补完成」；取消完成则清掉标记。
-            completedLate = if (markCompleted) schedule.isExpired(today) else false,
+            completedLate = if (markCompleted) schedule.isPastDue(today) else false,
             // 完成记录不再循环（由副本负责继续），与「清单完成快照」的口径保持一致。
             recurrence = if (markCompleted && repeatingSingle) Recurrence.NONE else schedule.recurrence
         )
@@ -325,7 +325,7 @@ class ScheduleViewModel(
                         it.copy(
                             completed = completed,
                             completedDate = if (completed) today else null,
-                            completedLate = if (completed) it.isExpired(today) else false
+                            completedLate = if (completed) it.isPastDue(today) else false
                         )
                     }
                     repository.updateBatch(updated)

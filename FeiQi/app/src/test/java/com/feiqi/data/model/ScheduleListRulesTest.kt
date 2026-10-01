@@ -162,4 +162,56 @@ class ScheduleListRulesTest {
         assertEquals(1, active.size)
         assertTrue(completed.isEmpty())
     }
+
+    // ---------------- 排序（v1.13.0）：待办按创建时间倒序 / 已完成按完成时间倒序 ----------------
+
+    @Test
+    fun pendingSection_sortsByCreatedAtDesc() {
+        val older = Schedule(title = "旧添加", date = today, createdAt = 1_000L)
+        val newer = Schedule(title = "新添加", date = today, createdAt = 2_000L)
+        val items = ScheduleListRules.buildItems(listOf(older, newer))
+        assertEquals(
+            listOf("新添加", "旧添加"),
+            items.map { (it as ScheduleListItem.Single).schedule.title }
+        )
+    }
+
+    @Test
+    fun pendingComesBeforeCompleted() {
+        val done = Schedule(title = "已完成", date = today, completed = true, completedDate = today)
+        val pending = Schedule(title = "待办", date = today, createdAt = 9_999L)
+        val items = ScheduleListRules.buildItems(listOf(done, pending))
+        assertEquals("待办", (items.first() as ScheduleListItem.Single).schedule.title)
+    }
+
+    @Test
+    fun completedSection_sortsByCompletionDateDesc() {
+        val early = Schedule(title = "早完成", date = today, completed = true, completedDate = today.minusDays(2))
+        val late = Schedule(title = "晚完成", date = today, completed = true, completedDate = today.minusDays(1))
+        val (_, completed) = ScheduleListRules.partition(
+            ScheduleListRules.buildItems(listOf(early, late)),
+            today
+        )
+        assertEquals(
+            listOf("晚完成", "早完成"),
+            completed.map { (it as ScheduleListItem.Single).schedule.title }
+        )
+    }
+
+    @Test
+    fun completedSection_autoMovedItems_alsoRankByCompletion() {
+        // 自动移入（跨日未完成）的条目也参与"完成时间"排序：用其到期日
+        val movedOld = Schedule(title = "前天到期", date = today.minusDays(2), reminder = true)
+        val movedNew = Schedule(title = "昨天到期", date = today.minusDays(1), reminder = true)
+        val doneToday = Schedule(title = "今天完成", date = today, completed = true, completedDate = today)
+        val (active, completed) = ScheduleListRules.partition(
+            ScheduleListRules.buildItems(listOf(movedOld, movedNew, doneToday)),
+            today
+        )
+        assertTrue(active.isEmpty())
+        assertEquals(
+            listOf("今天完成", "昨天到期", "前天到期"),
+            completed.map { (it as ScheduleListItem.Single).schedule.title }
+        )
+    }
 }
