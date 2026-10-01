@@ -254,9 +254,11 @@ class ScheduleViewModel(
                                 repository.updateBatch(group.map { it.copy(completedDate = today) })
                                 _events.emit("清单「${updated.listTitle}」已完成")
                             }
-                        } else if (!markCompleted && group.any { it.completedDate != null }) {
-                            // 取消勾选时清空清单的完成日期
-                            repository.updateBatch(group.map { it.copy(completedDate = null) })
+                        } else if (!markCompleted) {
+                            // 取消勾选**不再清空** completedDate：
+                            // 它标记"曾完成过"，是「跨日条目回到待办区后不再被自动归档」的依据；
+                            // 清空会让刚拉回来的清单立刻又被判为逾期、弹回已完成区（v1.13.1 修复的延伸）。
+                            // （卡片不再显示"完成于 X"，因此保留此字段没有展示副作用。）
                         }
                     }
                 } else if (markCompleted && repeatingSingle) {
