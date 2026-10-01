@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -709,6 +710,24 @@ internal fun submitQuickAdd(
     }
     return true
 }
+
+/**
+ * 监听"用户主动按下这一行"（**Initial 阶段**，早于输入框自身消费事件）。
+ *
+ * 用途：区分「用户点击定位光标」与「程序化移交焦点」——
+ * 前者要保留用户点到的位置，后者一律把光标送到行尾。
+ */
+internal fun Modifier.observeUserTap(tapped: androidx.compose.runtime.MutableState<Boolean>): Modifier =
+    this.pointerInput(tapped) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                    tapped.value = true
+                }
+            }
+        }
+    }
 
 /** 搜索匹配：待办标题或清单标题包含关键字（忽略大小写）。 */
 private fun ScheduleListItem.matchesKeyword(keyword: String): Boolean = when (this) {

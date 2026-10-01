@@ -334,6 +334,14 @@ internal fun ActiveInputRow(
     onBackspaceOnEmpty: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    // 内部以 TextFieldValue 承载：String 版本的光标位置由框架决定（常落在行首），
+    // 这里要能主动把光标送到行尾（规则同清单条目行）。
+    var value by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+    val focusFromUserTap = remember { mutableStateOf(false) }
+    // 外部文本变化（提交后清空等）→ 同步并把光标放到末尾
+    LaunchedEffect(text) {
+        if (value.text != text) value = TextFieldValue(text, TextRange(text.length))
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -345,13 +353,28 @@ internal fun ActiveInputRow(
             modifier = Modifier.size(28.dp)
         )
         BasicTextField(
-            value = text,
-            onValueChange = onTextChange,
+            value = value,
+            onValueChange = { newVal ->
+                value = newVal
+                onTextChange(newVal.text)
+            },
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
+                .observeUserTap(focusFromUserTap)
+                .onFocusChanged { state ->
+                    // 程序化聚焦（打开面板 / 上一条确认后回焦）→ 光标落到行尾；用户点击 → 保留其位置
+                    if (state.isFocused) {
+                        if (!focusFromUserTap.value) {
+                            value = TextFieldValue(value.text, TextRange(value.text.length))
+                        }
+                        focusFromUserTap.value = false
+                    } else {
+                        focusFromUserTap.value = false
+                    }
+                }
                 .onKeyEvent { event ->
-                    if (event.key == Key.Backspace && text.isEmpty()) {
+                    if (event.key == Key.Backspace && value.text.isEmpty()) {
                         onBackspaceOnEmpty()
                         true
                     } else {
@@ -365,7 +388,7 @@ internal fun ActiveInputRow(
             decorationBox = { innerTextField ->
                 Box {
                     // 始终参与布局（含透明态），避免占位文案的显隐导致行高变化 → 卡片跳动。
-                    if (text.isEmpty()) {
+                    if (value.text.isEmpty()) {
                         Text(
                             text = stringResource(R.string.enter_to_add_todo),
                             color = if (placeholderVisible) {
@@ -382,7 +405,7 @@ internal fun ActiveInputRow(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = {
                 // 当前行未输入内容直接回车：触发震动反馈，不新增待办。
-                if (text.isBlank()) {
+                if (value.text.isBlank()) {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 } else {
                     onCommit()
@@ -470,6 +493,8 @@ internal fun DraftItemRow(
 ) {
     // 行内文本以本地 TextFieldValue 承载（需要光标位置），变更即时回传给上层草稿列表。
     var value by remember(item.id) { mutableStateOf(TextFieldValue(item.text)) }
+    // 本次聚焦是否来自用户点击：点击 → 保留用户指定的光标位置；程序化移交 → 光标落到行尾
+    val focusFromUserTap = remember(item.id) { mutableStateOf(false) }
 
     fun placeCursorAtEnd() {
         value = TextFieldValue(value.text, TextRange(value.text.length))
@@ -478,7 +503,7 @@ internal fun DraftItemRow(
 
     // 兜底通道：标记已到、但没有伴随焦点变化（例如该行本来就处于焦点）时，在这里补上。
     LaunchedEffect(cursorAtEnd) {
-        if (cursorAtEnd) placeCursorAtEnd()
+        if (cursorAtEnd && !focusFromUserTap.value) placeCursorAtEnd()
     }
 
     Row(
@@ -500,10 +525,18 @@ internal fun DraftItemRow(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
+                .observeUserTap(focusFromUserTap)
                 .onFocusChanged { state ->
-                    // 获焦的**同一帧**就把光标放到末尾：这样第一帧画出来就在行尾，
-                    // 不会出现「先显示在行首、下一帧再跳到行尾」的可见跳动。
-                    if (state.isFocused && cursorAtEndProvider()) placeCursorAtEnd()
+                    // 规则（v1.13.3）：**程序化聚焦一律把光标送到行尾**（新增/删除/确认/回跳/打开面板自动聚焦）；
+                    // **唯一例外**是用户主动点进行内某处 → 保留其指定位置。
+                    // 且获焦的**同一帧**就落位，避免「先显示在行首、下一帧再跳到行尾」的可见跳动。
+                    if (state.isFocused) {
+                        if (cursorAtEndProvider() || !focusFromUserTap.value) placeCursorAtEnd()
+                        focusFromUserTap.value = false
+                        onCursorAtEndConsumed()
+                    } else {
+                        focusFromUserTap.value = false
+                    }
                 }
                 .onKeyEvent { event ->
                     // 内容已清空后再退格一次即移除该行（输入法删除，无需确认）。

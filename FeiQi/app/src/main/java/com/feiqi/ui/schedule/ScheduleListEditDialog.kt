@@ -598,6 +598,8 @@ internal fun EditableItemRow(
     val haptic = LocalHapticFeedback.current
     // 仅以 key 作为 remember 键，避免每次按键因 state.title 变化而重置光标位置。
     var text by remember(state.key) { mutableStateOf(TextFieldValue(state.title)) }
+    // 本次聚焦是否来自用户点击（点击 → 保留其指定位置；程序化移交 → 光标落到行尾）
+    val focusFromUserTap = remember(state.key) { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
@@ -634,12 +636,18 @@ internal fun EditableItemRow(
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
+                .observeUserTap(focusFromUserTap)
                 .onFocusChanged { fs ->
-                    // 删除/回跳后进入此行时，把光标放到内容末尾而非最前面。
-                    // 由父级 pendingCursorAtEnd map 标记（row 独立），该 row 真正获焦时消费。
-                    if (fs.isFocused && cursorAtEnd) {
-                        text = text.copy(selection = TextRange(text.text.length))
+                    // 规则（v1.13.3）：**程序化聚焦一律把光标送到行尾**（删除/回跳/打开弹窗自动聚焦等）；
+                    // **唯一例外**是用户主动点进行内某处 → 保留其指定位置。
+                    if (fs.isFocused) {
+                        if (cursorAtEnd || !focusFromUserTap.value) {
+                            text = text.copy(selection = TextRange(text.text.length))
+                        }
+                        focusFromUserTap.value = false
                         onCursorAtEndConsumed()
+                    } else {
+                        focusFromUserTap.value = false
                     }
                 }
                 .onKeyEvent { event ->
@@ -688,6 +696,14 @@ internal fun NewItemInputRow(
     focusRequester: FocusRequester
 ) {
     val haptic = LocalHapticFeedback.current
+    // 内部以 TextFieldValue 承载：String 版本的光标位置由框架决定（常落在行首），
+    // 这里要能主动把光标送到行尾（规则同清单条目行）。
+    var value by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+    val focusFromUserTap = remember { mutableStateOf(false) }
+    // 外部文本变化（提交后清空等）→ 同步并把光标放到末尾
+    LaunchedEffect(text) {
+        if (value.text != text) value = TextFieldValue(text, TextRange(text.length))
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -714,14 +730,29 @@ internal fun NewItemInputRow(
             )
         }
         BasicTextField(
-            value = text,
-            onValueChange = onTextChange,
+            value = value,
+            onValueChange = { newVal ->
+                value = newVal
+                onTextChange(newVal.text)
+            },
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focusRequester)
+                .observeUserTap(focusFromUserTap)
+                .onFocusChanged { state ->
+                    // 程序化聚焦 → 光标落到行尾；用户点击行内 → 保留其指定位置（v1.13.3 规则）
+                    if (state.isFocused) {
+                        if (!focusFromUserTap.value) {
+                            value = TextFieldValue(value.text, TextRange(value.text.length))
+                        }
+                        focusFromUserTap.value = false
+                    } else {
+                        focusFromUserTap.value = false
+                    }
+                }
                 .onKeyEvent { event ->
                     when {
-                        event.key == Key.Backspace && text.isEmpty() -> {
+                        event.key == Key.Backspace && value.text.isEmpty() -> {
                             onBackspaceOnEmpty()
                             true
                         }
@@ -730,7 +761,7 @@ internal fun NewItemInputRow(
                         // 仅在按键按下时响应，避免按下/抬起重复触发。
                         event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN
                                 && event.key == Key.Enter -> {
-                            if (text.isBlank()) {
+                            if (value.text.isBlank()) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             } else {
                                 onCommit()
@@ -746,7 +777,7 @@ internal fun NewItemInputRow(
             ),
             decorationBox = { innerTextField ->
                 Box {
-                    if (text.isEmpty()) {
+                    if (value.text.isEmpty()) {
                         Text(
                             text = stringResource(R.string.enter_to_add_todo),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
