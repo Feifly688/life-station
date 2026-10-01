@@ -133,9 +133,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // 拖拽到边缘时的自动滚动参数：感应区高度、每帧最小/最大滚动量
-/** 首页网格列数（固定 2 列：半宽瓷砖两两并排，整行卡片占满）。 */
-private const val HOME_GRID_COLUMNS = 2
-
 /**
  * 边缘自动滚动的**感应区比例**：进入可视区上下各 1/4 区域即触发滚动，
  * 无需一直拖到最边缘。想更早/更晚触发只需改这一个数。
@@ -359,9 +356,15 @@ fun HomeScreen(
             }
         }
     )
-    Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        // 布局规则收敛在 HomeGridRules（纯函数 + 单测）：
+        // 超窄屏降单列；双列下半宽瓷砖不成对时自动补满整行（不出现半行空隙）。
+        val columns = HomeGridRules.columnsFor(maxWidth.value)
+        val spanByCard = remember(cardOrder, columns) {
+            cardOrder.zip(HomeGridRules.spansFor(cardOrder.map { it.span }, columns)).toMap()
+        }
         LazyVerticalGrid(
-            columns = GridCells.Fixed(HOME_GRID_COLUMNS),
+            columns = GridCells.Fixed(columns),
             state = gridState,
             modifier = Modifier
                 .fillMaxHeight()
@@ -383,7 +386,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.lg),
             contentPadding = PaddingValues(bottom = FeiQiSpacing.xl)
         ) {
-        item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
+        item(span = { GridItemSpan(columns) }) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -429,7 +432,7 @@ fun HomeScreen(
             }
         }
 
-        item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
+        item(span = { GridItemSpan(columns) }) {
             Text(
                 text = stringResource(R.string.home_headline),
                 style = MaterialTheme.typography.headlineLarge,
@@ -440,7 +443,7 @@ fun HomeScreen(
 
         // ---------------- 可排序区块：顺序由 HomeCard 顺序决定（默认顺序见 HomeCard.DEFAULT_ORDER） ----------------
         if (layoutEditing) {
-            item(span = { GridItemSpan(HOME_GRID_COLUMNS) }) {
+            item(span = { GridItemSpan(columns) }) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -468,7 +471,7 @@ fun HomeScreen(
         items(
             items = cardOrder,
             key = { it.id },
-            span = { card -> GridItemSpan(card.span) }
+            span = { card -> GridItemSpan(spanByCard[card] ?: card.span) }
         ) { card ->
             HomeBlock(
                 card = card,
