@@ -11,6 +11,10 @@ import com.feiqi.data.entity.HabitRecordEntity
 import com.feiqi.data.entity.MediaEntity
 import com.feiqi.data.entity.ScheduleCompletionEntity
 import com.feiqi.data.entity.ScheduleEntity
+import com.feiqi.data.entity.ExerciseEntity
+import com.feiqi.data.entity.WorkoutDayEntity
+import com.feiqi.data.entity.WorkoutExerciseEntity
+import com.feiqi.data.entity.WorkoutPlanEntity
 import com.feiqi.data.entity.WorkoutRecordEntity
 
 @Database(
@@ -21,9 +25,14 @@ import com.feiqi.data.entity.WorkoutRecordEntity
         HabitEntity::class,
         HabitRecordEntity::class,
         MediaEntity::class,
-        WorkoutRecordEntity::class
+        WorkoutRecordEntity::class,
+        // 健身 v2：计划目录（计划 / 训练日 / 动作库 / 关联），workout_records 保持不变
+        WorkoutPlanEntity::class,
+        WorkoutDayEntity::class,
+        ExerciseEntity::class,
+        WorkoutExerciseEntity::class
     ],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class FeiQiDatabase : RoomDatabase() {
@@ -35,6 +44,14 @@ abstract class FeiQiDatabase : RoomDatabase() {
     abstract fun mediaDao(): MediaDao
 
     abstract fun workoutDao(): WorkoutDao
+
+    abstract fun workoutPlanDao(): WorkoutPlanDao
+
+    abstract fun workoutDayDao(): WorkoutDayDao
+
+    abstract fun exerciseDao(): ExerciseDao
+
+    abstract fun workoutExerciseDao(): WorkoutExerciseDao
 
     companion object {
         /** v1 -> v2：记账记录增加精确到秒的时间列，老数据默认 00:00:00。 */
@@ -153,6 +170,88 @@ abstract class FeiQiDatabase : RoomDatabase() {
          * 索引与 [WorkoutRecordEntity] 的 `@Entity(indices=…)` 严格一致：
          * Room 打开数据库时会逐列/逐索引比对，多一个或少一个索引都会启动即崩。
          */
+        /**
+         * v11 -> v12：健身 v2 的计划目录四张表。
+         *
+         * **只新建表**：`todos` / `accounts` / `habit_records` / `medias` / `workout_records`
+         * 一律不 ALTER，老用户数据零影响。
+         *
+         * 索引名与列名**必须**与实体 `@Entity(indices = …)` 完全一致 ——
+         * 本库 `exportSchema = false`（无编译期校验），Room 打开数据库时逐项比对，
+         * 多一个或少一个索引都会 `IllegalStateException` 启动即崩。
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `workout_plans` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`planId` TEXT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`description` TEXT NOT NULL, " +
+                        "`type` TEXT NOT NULL, " +
+                        "`goal` TEXT NOT NULL, " +
+                        "`cycleDays` INTEGER NOT NULL, " +
+                        "`createdTime` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_plans_planId` " +
+                        "ON `workout_plans` (`planId`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `workout_days` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`planId` TEXT NOT NULL, " +
+                        "`dayNumber` INTEGER NOT NULL, " +
+                        "`title` TEXT NOT NULL, " +
+                        "`bodyParts` TEXT NOT NULL, " +
+                        "`description` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_days_planId_dayNumber` " +
+                        "ON `workout_days` (`planId`, `dayNumber`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `exercises` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`bodyPart` TEXT NOT NULL, " +
+                        "`difficulty` TEXT NOT NULL, " +
+                        "`description` TEXT NOT NULL, " +
+                        "`image` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_exercises_name` " +
+                        "ON `exercises` (`name`)"
+                )
+
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `workout_exercises` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`dayId` INTEGER NOT NULL, " +
+                        "`exerciseId` INTEGER NOT NULL, " +
+                        "`sets` INTEGER NOT NULL, " +
+                        "`reps` TEXT NOT NULL, " +
+                        "`duration` INTEGER NOT NULL, " +
+                        "`restTime` INTEGER NOT NULL, " +
+                        "`note` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_exercises_dayId_exerciseId` " +
+                        "ON `workout_exercises` (`dayId`, `exerciseId`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_workout_exercises_dayId` " +
+                        "ON `workout_exercises` (`dayId`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_workout_exercises_exerciseId` " +
+                        "ON `workout_exercises` (`exerciseId`)"
+                )
+            }
+        }
+
         val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

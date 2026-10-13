@@ -9,6 +9,7 @@ import com.feiqi.data.repository.MediaRepository
 import com.feiqi.data.repository.PreferencesRepository
 import com.feiqi.data.repository.QuoteRepository
 import com.feiqi.data.repository.ScheduleRepository
+import com.feiqi.data.repository.WorkoutCatalogRepository
 import com.feiqi.data.repository.WorkoutRepository
 import com.feiqi.utils.BackupManager
 import com.feiqi.utils.ExcelExporter
@@ -34,6 +35,7 @@ class FeiQiApplication : Application() {
         container = AppContainer(this)
         NotificationUtils.createChannel(this)
         restoreReminders()
+        seedWorkoutCatalog()
         syncQuotes()
     }
 
@@ -60,6 +62,21 @@ class FeiQiApplication : Application() {
      * 每月→本月/下月同日；每年→今年/明年同月日），状态保持待完成，提醒时刻不变。
      * 与用户预期一致——循环清单不回补历史欠账，直接落到下一个应提醒日继续提醒。
      */
+    /**
+     * 健身 v2：首次启动把官方「30天居家爆炸训练」写入计划目录四张表。
+     *
+     * **幂等**：已有计划就跳过，因此不会覆盖用户后续自建的计划，也不会重复插入。
+     * 失败只记日志，不打扰用户（与 restoreReminders / syncQuotes 同一风格）。
+     */
+    private fun seedWorkoutCatalog() {
+        appScope.launch {
+            runCatching {
+                val seeded = container.workoutCatalogRepository.seedOfficialPlanIfEmpty()
+                if (seeded) AppLogger.i("Workout", "官方训练计划已写入计划目录")
+            }.onFailure { AppLogger.e("Workout", "写入官方训练计划失败", it) }
+        }
+    }
+
     private fun restoreReminders() {
         appScope.launch {
             runCatching {
@@ -105,6 +122,7 @@ class AppContainer(context: Context) {
             FeiQiDatabase.MIGRATION_8_9,
             FeiQiDatabase.MIGRATION_9_10,
             FeiQiDatabase.MIGRATION_10_11,
+            FeiQiDatabase.MIGRATION_11_12,
         )
         .build()
 
@@ -112,6 +130,12 @@ class AppContainer(context: Context) {
     val scheduleRepository = ScheduleRepository(database.scheduleDao())
     val mediaRepository = MediaRepository(database.mediaDao())
     val workoutRepository = WorkoutRepository(database.workoutDao())
+    val workoutCatalogRepository = WorkoutCatalogRepository(
+        database.workoutPlanDao(),
+        database.workoutDayDao(),
+        database.exerciseDao(),
+        database.workoutExerciseDao(),
+    )
     val preferencesRepository = PreferencesRepository(appContext)
     val backupManager = BackupManager(appContext)
     val excelExporter = ExcelExporter(appContext)

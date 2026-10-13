@@ -1,0 +1,152 @@
+package com.feiqi.data.model
+
+import com.feiqi.data.entity.ExerciseEntity
+import com.feiqi.data.entity.WorkoutDayEntity
+import com.feiqi.data.entity.WorkoutExerciseEntity
+import com.feiqi.data.entity.WorkoutPlanEntity
+
+/**
+ * 官方计划的**种子数据**：把现有静态 `WORKOUT_PLANS` 映射成 v2 的四张表。
+ *
+ * ## 为什么保留旧静态数据
+ * 现有 30 天计划的运行时数据源仍是 `WORKOUT_PLANS`（首页/主页/详情页都在用它），
+ * 本阶段**不切换数据源**（避免改变已有体验）。种子只是把同一份内容**再落一份到新表**，
+ * 为下一阶段「自定义计划 / 创建页」打好底座。
+ *
+ * ## 单一数据源
+ * 动作名、组数、次数、备注全部来自 `WORKOUT_PLANS`，本文件只补充
+ * 「动作 → 部位 / 难度」的人工映射，不重复维护动作清单。
+ */
+object WorkoutPlanSeed {
+
+    /** v2 官方计划 id（与文档示例一致）。 */
+    const val OFFICIAL_PLAN_ID: String = "home_beginner_30"
+
+    /**
+     * 旧打卡记录使用的 planId。
+     *
+     * `workout_records` 按要求**保持不变**，因此历史记录里的 planId 仍是 `home30`；
+     * 与 v2 计划 id 的映射留给下一阶段处理（此处只做标注，避免两处硬编码字符串）。
+     */
+    const val LEGACY_PLAN_ID: String = "home30"
+
+    /** 默认组间休息（秒）。 */
+    const val DEFAULT_REST_SECONDS: Int = 90
+
+    /** 种子写入时间（固定值，保证重复写入幂等、不随时间漂移）。 */
+    private const val SEED_CREATED_TIME = 1_767_225_600_000L // 2026-01-01T00:00:00Z
+
+    /** 动作名 → (主要部位, 难度)。按名去重后用于写入动作库。 */
+    private val EXERCISE_META: Map<String, Pair<String, ExerciseDifficulty>> = mapOf(
+        // 胸 + 三头
+        "俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
+        "宽距俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
+        "慢速俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
+        "钻石俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
+        "臂屈伸" to ("三头" to ExerciseDifficulty.BEGINNER),
+        // 肩 + 腹
+        "Pike 俯卧撑" to ("肩" to ExerciseDifficulty.INTERMEDIATE),
+        "侧平举" to ("肩" to ExerciseDifficulty.BEGINNER),
+        "卷腹" to ("腹" to ExerciseDifficulty.BEGINNER),
+        "平板支撑" to ("腹" to ExerciseDifficulty.BEGINNER),
+        "登山跑" to ("腹" to ExerciseDifficulty.BEGINNER),
+        // 背 + 二头
+        "超人式" to ("背" to ExerciseDifficulty.BEGINNER),
+        "Y 字伸展" to ("背" to ExerciseDifficulty.BEGINNER),
+        "毛巾划船" to ("背" to ExerciseDifficulty.INTERMEDIATE),
+        "弯举" to ("二头" to ExerciseDifficulty.BEGINNER),
+        // 腿 + 臀
+        "深蹲" to ("腿" to ExerciseDifficulty.BEGINNER),
+        "箭步蹲" to ("腿" to ExerciseDifficulty.INTERMEDIATE),
+        "臀桥" to ("臀" to ExerciseDifficulty.BEGINNER),
+        "靠墙静蹲" to ("腿" to ExerciseDifficulty.BEGINNER),
+        // 胸 + 肩
+        "标准俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
+        "窄距俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
+        "反向飞鸟" to ("肩" to ExerciseDifficulty.INTERMEDIATE),
+        "耸肩" to ("肩" to ExerciseDifficulty.BEGINNER),
+        // 腹 + 手臂
+        "俄罗斯转体" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
+        "死虫式" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
+        "跪姿俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
+        "侧支撑" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
+        // 恢复训练
+        "全身拉伸" to ("全身" to ExerciseDifficulty.BEGINNER),
+        "散步" to ("全身" to ExerciseDifficulty.BEGINNER),
+        "深呼吸放松" to ("全身" to ExerciseDifficulty.BEGINNER),
+    )
+
+    /** 官方计划头（id 固定为 1，便于确定性关联）。 */
+    val plan: WorkoutPlanEntity = WorkoutPlanEntity(
+        id = 1L,
+        planId = OFFICIAL_PLAN_ID,
+        name = "30天居家爆炸训练",
+        description = "居家徒手循环训练，每天组合两个身体部位，无需器械",
+        type = WorkoutPlanType.OFFICIAL.code,
+        goal = WorkoutGoal.SHAPE.code,
+        cycleDays = WORKOUT_TOTAL_DAYS,
+        createdTime = SEED_CREATED_TIME,
+    )
+
+    /** 30 个训练日（id = dayNumber，确定性）。 */
+    val days: List<WorkoutDayEntity> = WORKOUT_PLANS.map { source ->
+        WorkoutDayEntity(
+            id = source.dayNumber.toLong(),
+            planId = OFFICIAL_PLAN_ID,
+            dayNumber = source.dayNumber,
+            title = source.bodyParts,
+            bodyParts = source.bodyParts,
+            description = source.description,
+        )
+    }
+
+    /** 动作库（按名去重，id 从 1 递增）。 */
+    val exercises: List<ExerciseEntity> = buildList {
+        WORKOUT_PLANS
+            .flatMap { it.exercises }
+            .map { it.name }
+            .distinct()
+            .forEachIndexed { index, name ->
+                val meta = EXERCISE_META[name]
+                val note = WORKOUT_PLANS
+                    .flatMap { it.exercises }
+                    .firstOrNull { it.name == name }
+                    ?.note
+                    .orEmpty()
+                add(
+                    ExerciseEntity(
+                        id = (index + 1).toLong(),
+                        name = name,
+                        bodyPart = meta?.first ?: "全身",
+                        difficulty = (meta?.second ?: ExerciseDifficulty.BEGINNER).code,
+                        description = note,
+                        image = "",
+                    )
+                )
+            }
+    }
+
+    /** 「天 ↔ 动作」关联（id 从 1 递增；dayId = dayNumber，exerciseId 见 [exercises]）。 */
+    val links: List<WorkoutExerciseEntity> = buildList {
+        var linkId = 1L
+        val exerciseIds = exercises.associate { it.name to it.id }
+        WORKOUT_PLANS.forEach { source ->
+            val dayId = source.dayNumber.toLong()
+            source.exercises.forEach { ex ->
+                val exerciseId = exerciseIds[ex.name] ?: return@forEach
+                add(
+                    WorkoutExerciseEntity(
+                        id = linkId++,
+                        dayId = dayId,
+                        exerciseId = exerciseId,
+                        sets = ex.sets,
+                        reps = ex.reps,
+                        duration = ex.durationSeconds,
+                        restTime = DEFAULT_REST_SECONDS,
+                        note = ex.note,
+                    )
+                )
+            }
+        }
+    }
+}
