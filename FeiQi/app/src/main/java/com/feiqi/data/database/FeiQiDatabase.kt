@@ -11,6 +11,7 @@ import com.feiqi.data.entity.HabitRecordEntity
 import com.feiqi.data.entity.MediaEntity
 import com.feiqi.data.entity.ScheduleCompletionEntity
 import com.feiqi.data.entity.ScheduleEntity
+import com.feiqi.data.entity.WorkoutRecordEntity
 
 @Database(
     entities = [
@@ -19,9 +20,10 @@ import com.feiqi.data.entity.ScheduleEntity
         ScheduleCompletionEntity::class,
         HabitEntity::class,
         HabitRecordEntity::class,
-        MediaEntity::class
+        MediaEntity::class,
+        WorkoutRecordEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class FeiQiDatabase : RoomDatabase() {
@@ -31,6 +33,8 @@ abstract class FeiQiDatabase : RoomDatabase() {
     abstract fun habitDao(): HabitDao
     abstract fun habitRecordDao(): HabitRecordDao
     abstract fun mediaDao(): MediaDao
+
+    abstract fun workoutDao(): WorkoutDao
 
     companion object {
         /** v1 -> v2：记账记录增加精确到秒的时间列，老数据默认 00:00:00。 */
@@ -138,6 +142,34 @@ abstract class FeiQiDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE schedules ADD COLUMN completedLate INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        /**
+         * v10 -> v11：新增健身打卡表 `workout_records`。
+         *
+         * **只新建表，既有表零改动** —— 待办/记账/习惯/书影音数据完全不受影响。
+         * 索引与 [WorkoutRecordEntity] 的 `@Entity(indices=…)` 严格一致：
+         * Room 打开数据库时会逐列/逐索引比对，多一个或少一个索引都会启动即崩。
+         */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `workout_records` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`planId` TEXT NOT NULL, " +
+                        "`dayNumber` INTEGER NOT NULL, " +
+                        "`date` TEXT NOT NULL, " +
+                        "`completedAt` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_workout_records_planId_dayNumber` " +
+                        "ON `workout_records` (`planId`, `dayNumber`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_workout_records_completedAt` " +
+                        "ON `workout_records` (`completedAt`)"
                 )
             }
         }

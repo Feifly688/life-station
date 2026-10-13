@@ -78,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.14.0</string>
+    <string name="version_value">v1.15.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -159,6 +159,20 @@
     <!-- 健康 -->
     <string name="health_title">健康</string>
     <string name="health_subtitle">记录体重与身体状态</string>
+    <!-- 健身：30 天居家训练 -->
+    <string name="back">返回</string>
+    <string name="workout_entry_title">30天居家训练</string>
+    <string name="workout_entry_desc">居家徒手 · 每日打卡 · 两个部位组合</string>
+    <string name="workout_title">健身</string>
+    <string name="workout_today">今日训练</string>
+    <string name="workout_start">开始训练</string>
+    <string name="workout_history">历史记录</string>
+    <string name="workout_set">完成本组</string>
+    <string name="workout_set_done">已完成</string>
+    <string name="workout_finish">完成今日训练</string>
+    <string name="workout_finish_disabled">完成全部动作后可打卡</string>
+    <string name="workout_checked">今日已打卡</string>
+    <string name="workout_celebrate">打卡完成，今天也做到了！</string>
     <string name="health_empty_title">还没有体重记录</string>
     <string name="health_empty_desc">记录今天的体重，开始关注身体变化。</string>
     <string name="record_weight_today">今日体重</string>

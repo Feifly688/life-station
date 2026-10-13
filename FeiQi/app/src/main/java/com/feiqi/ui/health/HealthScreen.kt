@@ -64,6 +64,7 @@ import com.feiqi.ui.theme.IncomeGreen
 import com.feiqi.ui.theme.OnSurfaceVariant
 import com.feiqi.ui.theme.Outline
 import com.feiqi.ui.theme.Primary
+import com.feiqi.ui.theme.CardAmber
 import com.feiqi.ui.theme.PrimaryContainer
 import com.feiqi.ui.theme.SurfaceVariant
 import com.feiqi.ui.theme.Tertiary
@@ -75,6 +76,7 @@ import java.time.LocalDate
 @Composable
 fun HealthScreen(
     viewModel: HealthViewModel,
+    workoutViewModel: WorkoutViewModel,
     modifier: Modifier = Modifier
 ) {
     val records by viewModel.records.collectAsStateWithLifecycle()
@@ -83,6 +85,13 @@ fun HealthScreen(
     var showProfileDialog by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<WeightRecord?>(null) }
     var chartRange by remember { mutableStateOf(WeightChartRange.DAY) }
+    // 健身：null = 不显示；非 null = 健身主页覆盖层；详情页同理
+    val workoutProgress by workoutViewModel.progress.collectAsStateWithLifecycle()
+    val workoutStreak by workoutViewModel.streak.collectAsStateWithLifecycle()
+    val workoutSummary = "Day ${workoutProgress.currentDay}/30 · 已完成 ${workoutProgress.completedCount} 次" +
+        if (workoutStreak > 0) " · 连续 $workoutStreak 天" else ""
+    var workoutHomeVisible by remember { mutableStateOf(false) }
+    var workoutDetailPlan by remember { mutableStateOf<com.feiqi.data.model.WorkoutPlan?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { toastMessage = it }
@@ -101,6 +110,13 @@ fun HealthScreen(
                 .padding(horizontal = 16.dp)
         ) {
             HeaderRow(recordCount = records.size)
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            WorkoutEntryCard(
+                summary = workoutSummary,
+                onClick = { workoutHomeVisible = true },
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -175,6 +191,26 @@ fun HealthScreen(
                 editingRecord = null
             },
             onDismiss = { editingRecord = null }
+        )
+    }
+
+    // 健身主页（二级页，整页覆盖）
+    if (workoutHomeVisible && workoutDetailPlan == null) {
+        WorkoutScreen(
+            viewModel = workoutViewModel,
+            onStartTraining = { plan -> workoutDetailPlan = plan },
+            onBack = { workoutHomeVisible = false },
+        )
+    }
+
+    // 训练详情（二级页，盖在健身主页之上）
+    workoutDetailPlan?.let { plan ->
+        val completedDays by workoutViewModel.completedDays.collectAsStateWithLifecycle()
+        WorkoutDetailScreen(
+            plan = plan,
+            alreadyCheckedIn = plan.dayNumber in completedDays,
+            onCheckIn = { workoutViewModel.checkIn(plan.dayNumber) },
+            onBack = { workoutDetailPlan = null },
         )
     }
 
@@ -952,5 +988,46 @@ private fun trimNumber(value: Double): String {
         // 固定 Locale.US：这里是**可编辑输入框**的初值，必须与保存时的 toDoubleOrNull() 口径一致，
         // 否则在逗号小数分隔符的系统语言下会回填 "62,5"，用户不再改动就保存会解析失败。
         String.format(java.util.Locale.US, "%.1f", value)
+    }
+}
+
+/** 健身入口卡：点击进入 30 天居家训练主页（作为健康页的二级页，不新增底部导航 Tab）。 */
+@Composable
+private fun WorkoutEntryCard(
+    summary: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardAmber),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.workout_entry_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "开始",
+                style = MaterialTheme.typography.labelLarge,
+                color = Primary,
+            )
+        }
     }
 }

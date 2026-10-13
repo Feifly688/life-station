@@ -9,6 +9,7 @@ import com.feiqi.data.repository.MediaRepository
 import com.feiqi.data.repository.PreferencesRepository
 import com.feiqi.data.repository.QuoteRepository
 import com.feiqi.data.repository.ScheduleRepository
+import com.feiqi.data.repository.WorkoutRepository
 import com.feiqi.utils.BackupManager
 import com.feiqi.utils.ExcelExporter
 import com.feiqi.utils.NotificationUtils
@@ -102,13 +103,15 @@ class AppContainer(context: Context) {
             FeiQiDatabase.MIGRATION_6_7,
             FeiQiDatabase.MIGRATION_7_8,
             FeiQiDatabase.MIGRATION_8_9,
-            FeiQiDatabase.MIGRATION_9_10
+            FeiQiDatabase.MIGRATION_9_10,
+            FeiQiDatabase.MIGRATION_10_11,
         )
         .build()
 
     val accountRepository = AccountRepository(database.accountDao())
     val scheduleRepository = ScheduleRepository(database.scheduleDao())
     val mediaRepository = MediaRepository(database.mediaDao())
+    val workoutRepository = WorkoutRepository(database.workoutDao())
     val preferencesRepository = PreferencesRepository(appContext)
     val backupManager = BackupManager(appContext)
     val excelExporter = ExcelExporter(appContext)
