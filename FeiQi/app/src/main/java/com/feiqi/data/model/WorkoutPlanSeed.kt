@@ -53,46 +53,15 @@ object WorkoutPlanSeed {
     /** 种子写入时间（固定值，保证重复写入幂等、不随时间漂移）。 */
     private const val SEED_CREATED_TIME = 1_767_225_600_000L // 2026-01-01T00:00:00Z
 
-    /** 动作名 → (主要部位, 难度)。按名去重后用于写入动作库。 */
-    private val EXERCISE_META: Map<String, Pair<String, ExerciseDifficulty>> = mapOf(
-        // 胸 + 三头
-        "俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
-        "宽距俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
-        "慢速俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
-        "钻石俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
-        "臂屈伸" to ("三头" to ExerciseDifficulty.BEGINNER),
-        // 肩 + 腹
-        "Pike 俯卧撑" to ("肩" to ExerciseDifficulty.INTERMEDIATE),
-        "侧平举" to ("肩" to ExerciseDifficulty.BEGINNER),
-        "卷腹" to ("腹" to ExerciseDifficulty.BEGINNER),
-        "平板支撑" to ("腹" to ExerciseDifficulty.BEGINNER),
-        "登山跑" to ("腹" to ExerciseDifficulty.BEGINNER),
-        // 背 + 二头
-        "超人式" to ("背" to ExerciseDifficulty.BEGINNER),
-        "Y 字伸展" to ("背" to ExerciseDifficulty.BEGINNER),
-        "毛巾划船" to ("背" to ExerciseDifficulty.INTERMEDIATE),
-        "弯举" to ("二头" to ExerciseDifficulty.BEGINNER),
-        // 腿 + 臀
-        "深蹲" to ("腿" to ExerciseDifficulty.BEGINNER),
-        "箭步蹲" to ("腿" to ExerciseDifficulty.INTERMEDIATE),
-        "臀桥" to ("臀" to ExerciseDifficulty.BEGINNER),
-        "靠墙静蹲" to ("腿" to ExerciseDifficulty.BEGINNER),
-        // 胸 + 肩
-        "标准俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
-        "窄距俯卧撑" to ("胸" to ExerciseDifficulty.INTERMEDIATE),
-        "反向飞鸟" to ("肩" to ExerciseDifficulty.INTERMEDIATE),
-        "耸肩" to ("肩" to ExerciseDifficulty.BEGINNER),
-        // 腹 + 手臂
-        "俄罗斯转体" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
-        "死虫式" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
-        "跪姿俯卧撑" to ("胸" to ExerciseDifficulty.BEGINNER),
-        "侧支撑" to ("腹" to ExerciseDifficulty.INTERMEDIATE),
-        // 恢复训练
-        "全身拉伸" to ("全身" to ExerciseDifficulty.BEGINNER),
-        "散步" to ("全身" to ExerciseDifficulty.BEGINNER),
-        "深呼吸放松" to ("全身" to ExerciseDifficulty.BEGINNER),
-    )
-
+    /**
+     * 动作元数据**单一数据源**：[ExerciseLibrarySeed]。
+     *
+     * v2 阶段 3 起，动作库成为用户可见的独立功能，
+     * 官方计划种子不再自带一份 `动作名 → (部位, 难度)` 映射（避免两处重复维护）：
+     * - 库中已收录的动作 → 直接用 [ExerciseLibrarySeed] 的完整字段；
+     * - 库中未收录的动作（如恢复日的拉伸/ 散步）→ 回退到静态计划的
+     *   「部位 = 全身、难度 = 初级」，`category` 留空（不会出现在动作库页面）。
+     */
     /** 官方计划头（id 固定为 1，便于确定性关联）。 */
     val plan: WorkoutPlanEntity = WorkoutPlanEntity(
         id = 1L,
@@ -117,28 +86,28 @@ object WorkoutPlanSeed {
         )
     }
 
-    /** 动作库（按名去重，id 从 1 递增）。 */
+    /** 动作库（按名去重，id 从 1 递增；元数据复用 [ExerciseLibrarySeed]）。 */
     val exercises: List<ExerciseEntity> = buildList {
         WORKOUT_PLANS
             .flatMap { it.exercises }
             .map { it.name }
             .distinct()
             .forEachIndexed { index, name ->
-                val meta = EXERCISE_META[name]
+                val library = ExerciseLibrarySeed.byName(name)
                 val note = WORKOUT_PLANS
                     .flatMap { it.exercises }
                     .firstOrNull { it.name == name }
                     ?.note
                     .orEmpty()
                 add(
-                    ExerciseEntity(
-                        id = (index + 1).toLong(),
-                        name = name,
-                        bodyPart = meta?.first ?: "全身",
-                        difficulty = (meta?.second ?: ExerciseDifficulty.BEGINNER).code,
-                        description = note,
-                        image = "",
-                    )
+                    library?.copy(id = (index + 1).toLong())
+                        ?: ExerciseEntity(
+                            id = (index + 1).toLong(),
+                            name = name,
+                            bodyPart = "全身",
+                            difficulty = ExerciseDifficulty.BEGINNER.code,
+                            description = note,
+                        )
                 )
             }
     }

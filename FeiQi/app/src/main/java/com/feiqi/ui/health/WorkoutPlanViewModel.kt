@@ -67,6 +67,10 @@ class WorkoutPlanViewModel(
     private val _categories = MutableStateFlow<List<BodyCategory>>(emptyList())
     val categories: StateFlow<List<BodyCategory>> = _categories
 
+    /** 用户手动指定的「训练日 → 动作名」映射（v2 阶段 3）。 */
+    private val _dayExercises = MutableStateFlow<Map<Int, List<String>>>(emptyMap())
+    val dayExercises: StateFlow<Map<Int, List<String>>> = _dayExercises
+
     /** 当前草稿（名称 + 部位齐全后才可用于保存）。 */
     private val _draft = MutableStateFlow(
         buildDraft(" ", WorkoutGoal.SHAPE, 30, 3, emptyList())
@@ -126,8 +130,24 @@ class WorkoutPlanViewModel(
         _cycleDays.value = 30
         _frequency.value = 3
         _categories.value = emptyList()
+        _dayExercises.value = emptyMap()
         refreshDraft()
     }
+
+    /** 设置某训练日手动选定的动作（动作选择页回调；空集合 = 交回自动挑选）。 */
+    fun setDayExercises(dayNumber: Int, names: Set<String>) {
+        _dayExercises.value = if (names.isEmpty()) {
+            _dayExercises.value - dayNumber
+        } else {
+            // 按点击顺序保留：Set 无序，这里按名称排序保证保存结果稳定可测
+            _dayExercises.value + (dayNumber to names.sorted())
+        }
+        refreshDraft()
+    }
+
+    /** 某训练日当前已选动作名。 */
+    fun dayExercisesOf(dayNumber: Int): Set<String> =
+        _dayExercises.value[dayNumber].orEmpty().toSet()
 
     private fun refreshDraft() {
         val value = buildDraft(
@@ -136,6 +156,7 @@ class WorkoutPlanViewModel(
             cycle = _cycleDays.value,
             freq = _frequency.value,
             cats = _categories.value,
+            dayExercises = _dayExercises.value,
         )
         _draft.value = value
         _saveable.value = isPlanDraftSaveable(value)
@@ -147,6 +168,7 @@ class WorkoutPlanViewModel(
         cycle: Int,
         freq: Int,
         cats: List<BodyCategory>,
+        dayExercises: Map<Int, List<String>> = emptyMap(),
     ): PlanDraft {
         val layout: List<PlannedDay> = layoutTrainingDays(cycle, freq)
         val ordered = if (cats.isEmpty()) cats else BodyCategory.entries.filter { it in cats }
@@ -157,6 +179,7 @@ class WorkoutPlanViewModel(
             frequencyPerWeek = freq,
             categories = ordered,
             days = assignCategories(layout, ordered),
+            dayExercises = dayExercises,
         )
     }
 

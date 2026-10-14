@@ -159,6 +159,12 @@ class MainActivity : ComponentActivity() {
                     )
                 )
 
+                val exerciseViewModel: com.feiqi.ui.health.ExerciseViewModel = viewModel(
+                    factory = com.feiqi.ui.health.ExerciseViewModel.factory(
+                        container.workoutCatalogRepository
+                    )
+                )
+
                     // 全部 Tab 常驻组合树，仅按当前路由切换显隐（fillMaxSize / size(0.dp)），
                     // 切 Tab 不再把其他页面移出组合树，保留各自的 remember 状态（滚动位置、输入、弹窗等），
                     // 解决切 Tab 后状态丢失、跳回顶部的问题（修复 H2）
@@ -191,6 +197,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = healthViewModel,
                                 workoutViewModel = workoutViewModel,
                                 workoutPlanViewModel = workoutPlanViewModel,
+                                exerciseViewModel = exerciseViewModel,
                                 modifier = baseModifier
                             )
                         }

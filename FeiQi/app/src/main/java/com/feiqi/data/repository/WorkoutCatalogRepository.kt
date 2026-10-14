@@ -11,11 +11,13 @@ import com.feiqi.data.entity.WorkoutPlanEntity
 import com.feiqi.data.model.BodyCategory
 import com.feiqi.data.model.Exercise
 import com.feiqi.data.model.ExerciseDifficulty
+import com.feiqi.data.model.ExerciseLibrarySeed
 import com.feiqi.data.model.MAX_DAILY_EXERCISES
 import com.feiqi.data.model.PlanDraft
 import com.feiqi.data.model.WorkoutGoal
 import com.feiqi.data.model.WorkoutPlanSeed
 import com.feiqi.data.model.WorkoutPlanType
+import com.feiqi.data.model.resolveDayExercises
 import com.feiqi.data.model.WorkoutPlan
 import kotlinx.coroutines.flow.Flow
 
@@ -65,8 +67,6 @@ class WorkoutCatalogRepository(
 
     // ---------------- 动作 ----------------
 
-    fun observeExercises(): Flow<List<ExerciseEntity>> = exerciseDao.observeAll()
-
     suspend fun getExerciseByName(name: String): ExerciseEntity? = exerciseDao.getByName(name)
 
     // ---------------- 关联 ----------------
@@ -104,18 +104,15 @@ class WorkoutCatalogRepository(
      * @return 新建计划的 [WorkoutPlanEntity.planId]
      */
     suspend fun saveUserPlan(draft: PlanDraft, newPlanId: String): String {
-        val detailParts = draft.categories.flatMap { it.detailParts }.distinct()
-        val library = exerciseDao.getByBodyParts(detailParts)
-        val byPart = library.groupBy { it.bodyPart }
+        val library = exerciseDao.getAllOnce()
 
-        // 1) 逐个训练日挑动作（按部位取，难度低的优先，最多 MAX_DAILY_EXERCISES 个）
+        // 1) 逐个训练日挑动作（手动指定优先，否则按大类自动挑）
         val dayDrafts = draft.days.map { planned ->
-            val parts = planned.category?.detailParts.orEmpty()
-            val picked = parts
-                .flatMap { byPart[it].orEmpty() }
-                .distinctBy { it.name }
-                .sortedBy { ExerciseDifficulty.fromCode(it.difficulty).ordinal }
-                .take(MAX_DAILY_EXERCISES)
+            val picked = resolveDayExercises(
+                day = planned,
+                library = library,
+                manual = draft.dayExercises[planned.dayNumber].orEmpty(),
+            )
             planned to picked
         }
 
@@ -185,7 +182,82 @@ class WorkoutCatalogRepository(
         planDao.deleteByPlanId(planId)
     }
 
-    /** 按部位取动作库（创建页推荐动作用）。 */
+    // ---------------- 动作库内容补全（v2 阶段 3） ----------------
+
+    /**
+     * 动作库内容补全（**幂等 + 保 id**）。
+     *
+     * ## 为什么必须单独一个种子
+     * [seedOfficialPlanIfEmpty] 是「plans 表非空就整体跳过」，
+     * 老用户升级后永远拿不到 v2 阶段 3 新增的字段（category / targetMuscle /
+     * equipment / steps / tips）。因此动作库内容有独立的补全入口。
+     *
+     * ## 为什么绝不用 REPLACE
+     * `exercises.name` 是唯一索引，REPLACE 会「删旧行 + 插新行」→ 自增 id 变化，
+     * 而 `workout_exercises.exerciseId` 按 id 硬引用，
+     * 结果是**所有已保存计划的训练动作全部悬空变空白**。
+     * 因此这里：存在 → [ExerciseDao.update]（保 id），不存在 → [ExerciseDao.insertIgnore]。
+     *
+     * ## 官方计划里的额外动作
+     * 官方 30 天计划中未被动作库收录的动作（恢复日的拉伸 / 散步 / 深呼吸等），
+     * 会按具体部位反查大类补上 `category`，让它们也能在动作库里被检索到。
+     *
+     * @return 新增条数（已存在并更新的不计入）
+     */
+    suspend fun seedExerciseLibrary(): Int {
+        var inserted = 0
+        // 1) 补齐动作库收录的 19 个动作
+        ExerciseLibrarySeed.exercises.forEach { seed ->
+            val existing = exerciseDao.getByName(seed.name)
+            if (existing == null) {
+                exerciseDao.insertIgnore(seed)
+                inserted++
+            } else {
+                //保 id：只覆盖内容字段，不动 id / name
+                exerciseDao.update(
+                    existing.copy(
+                        bodyPart = seed.bodyPart,
+                        difficulty = seed.difficulty,
+                        description = seed.description,
+                        category = seed.category,
+                        targetMuscle = seed.targetMuscle,
+                        equipment = seed.equipment,
+                        steps = seed.steps,
+                        tips = seed.tips,
+                    )
+                )
+            }
+        }
+        // 2) 官方计划里未被收录的动作：按具体部位反查大类
+        exerciseDao.getAllOnce().forEach { exercise ->
+            if (exercise.category.isNotBlank()) return@forEach
+            val category = ExerciseLibrarySeed.categoryOfBodyPart(exercise.bodyPart) ?: return@forEach
+            exerciseDao.update(
+                exercise.copy(
+                    category = category.label,
+                    targetMuscle = exercise.targetMuscle.ifBlank { exercise.bodyPart },
+                    steps = exercise.steps.ifBlank { exercise.description },
+                )
+            )
+        }
+        return inserted
+    }
+
+    // ---------------- 动作库读取 ----------------
+
+    /** 全库动作。 */
+    fun observeExercises(): Flow<List<ExerciseEntity>> = exerciseDao.observeAll()
+
+    /** 按大类观察（分类卡/ 动作列表页）。 */
+    fun observeExercisesByCategory(category: String): Flow<List<ExerciseEntity>> =
+        exerciseDao.observeByCategory(category)
+
+    /** 按 id 观察（动作详情页）。 */
+    fun observeExerciseById(id: Long): Flow<ExerciseEntity?> = exerciseDao.observeById(id)
+
+    suspend fun getExerciseById(id: Long): ExerciseEntity? = exerciseDao.getById(id)
+
+    /** 按部位取动作库（创建计划时按部位挑动作）。 */
     suspend fun exercisesByBodyParts(parts: List<String>): List<ExerciseEntity> =
         exerciseDao.getByBodyParts(parts)
 

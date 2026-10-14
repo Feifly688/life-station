@@ -103,7 +103,9 @@ class WorkoutPlanBuilderTest {
         assertEquals(listOf("胸", "三头"), BodyCategory.CHEST.detailParts)
         assertEquals(listOf("背", "二头"), BodyCategory.BACK.detailParts)
         assertEquals(listOf("肩"), BodyCategory.SHOULDER.detailParts)
-        assertEquals(listOf("腿", "臀"), BodyCategory.LEG.detailParts)
+        // v2 阶段 3：臀部独立成类，不再并入腿部
+        assertEquals(listOf("腿"), BodyCategory.LEG.detailParts)
+        assertEquals(listOf("臀"), BodyCategory.HIP.detailParts)
         assertEquals(listOf("二头", "三头"), BodyCategory.ARM.detailParts)
         assertEquals(listOf("腹"), BodyCategory.CORE.detailParts)
     }
@@ -111,14 +113,23 @@ class WorkoutPlanBuilderTest {
     @Test
     fun `展示串为中文加号连接`() {
         assertEquals("胸 + 三头", BodyCategory.CHEST.displayParts)
-        assertEquals("腿 + 臀", BodyCategory.LEG.displayParts)
+        assertEquals("臀", BodyCategory.HIP.displayParts)
     }
 
     @Test
-    fun `动作库部位全部被六大类覆盖`() {
+    fun `动作库部位全部被七大类覆盖`() {
         val libraryParts = setOf("胸", "三头", "肩", "腹", "背", "二头", "腿", "臀")
         val covered = BodyCategory.entries.flatMap { it.detailParts }.toSet()
         assertTrue(libraryParts.all { it in covered })
+    }
+
+    @Test
+    fun `训练大类共七个`() {
+        assertEquals(7, BodyCategory.entries.size)
+        assertEquals(
+            listOf("胸部", "背部", "肩部", "腿部", "臀部", "手臂", "腹部"),
+            BodyCategory.labels,
+        )
     }
 
     // ---------------- 校验 ----------------

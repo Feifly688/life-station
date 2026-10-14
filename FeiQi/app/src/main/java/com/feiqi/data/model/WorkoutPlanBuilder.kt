@@ -11,27 +11,62 @@ package com.feiqi.data.model
  * 3. 排布结果与 UI 无关，UI 只负责渲染 [PlanDraft]。
  */
 
-/** 用户创建计划时可选的 6 大类部位。 */
+/**
+ * 用户可选的**训练大类**（v2 阶段 3 起共 7 类）。
+ *
+ * ## 为什么臀部独立成类（阶段 3 定稿）
+ * 臀部训练在居家训练里很常见（臀桥/臀推/蚌式开合），且**动作目标与腿部不同**，
+ * 混在一类会让动作库分类失真。保留独立分类便于后续扩展臀部动作。
+ *
+ * ## 与动作库的关系
+ * 大类 → [detailParts] → `exercises.bodyPart`，
+ * 因此"选了大类"就能查到该类下的全部动作。
+ */
 enum class BodyCategory(
     val label: String,
     val emoji: String,
-    /** 映射到动作库的细粒度部位（中文）。 */
+    /** 映射到动作库的具体部位（中文）。 */
     val detailParts: List<String>,
 ) {
     CHEST("胸部", "💪", listOf("胸", "三头")),
     BACK("背部", "🔙", listOf("背", "二头")),
     SHOULDER("肩部", "🤸", listOf("肩")),
-    LEG("腿部", "🦵", listOf("腿", "臀")),
+    LEG("腿部", "🦵", listOf("腿")),
+    HIP("臀部", "🍑", listOf("臀")),
     ARM("手臂", "💥", listOf("二头", "三头")),
     CORE("腹部", "🔥", listOf("腹"));
 
-    /** 「胸 + 三头」这样的展示串。 */
+    /** 「胸 + 三头」这样的展示串（动作库页用具体目标肌肉时展示单个）。 */
     val displayParts: String get() = detailParts.joinToString(" + ")
 
     companion object {
         /** 按名称解析（容错）。 */
         fun fromLabel(label: String): BodyCategory =
             entries.firstOrNull { it.label == label } ?: CHEST
+
+        /** 全部大类标签（动作库分类卡按此顺序展示）。 */
+        val labels: List<String> = entries.map { it.label }
+    }
+}
+
+/**
+ * 训练器械（v2 阶段 3）。
+ *
+ * 翡栖定位为**居家训练**，故只保留最常见的 4 种；
+ * 后续扩展健身房场景时再追加（壶铃 / 俯卧撑板 / 龙门架 等）。
+ *
+ * 存英文码（便于筛选统计），展示层映射为中文。
+ */
+enum class ExerciseEquipment(val code: String, val label: String, val emoji: String) {
+    NONE("NONE", "无器械", "✋"),
+    BAND("BAND", "弹力带", "🎗"),
+    DUMBBELL("DUMBBELL", "哑铃", "🏋"),
+    MAT("MAT", "瑜伽垫", "🟫");
+
+    companion object {
+        /** 容错解析，未知值回落到 [NONE]。 */
+        fun fromCode(code: String): ExerciseEquipment =
+            entries.firstOrNull { it.code == code } ?: NONE
     }
 }
 
@@ -121,11 +156,56 @@ data class PlanDraft(
     val frequencyPerWeek: Int,
     val categories: List<BodyCategory>,
     val days: List<PlannedDay>,
+    /**
+     * **用户手动指定的训练日动作**（v2 阶段 3）。
+     *
+     * key = dayNumber，value = 动作名列表（按用户勾选顺序）。
+     * 未出现在此表中的训练日，保存时按大类从动作库**自动挑选**（阶段 2 行为）。
+     */
+    val dayExercises: Map<Int, List<String>> = emptyMap(),
 ) {
     val trainingDayCount: Int get() = days.count { !it.isRest }
     val categorySummary: String
         get() = if (categories.isEmpty()) "未设置部位"
         else categories.joinToString(" · ") { "${it.emoji} ${it.label}" }
+
+    /** 某天是否被用户手动指定过动作。 */
+    fun hasManualExercises(dayNumber: Int): Boolean =
+        dayExercises[dayNumber].orEmpty().isNotEmpty()
+
+    /** 手动指定过的训练日数量。 */
+    val manualDayCount: Int get() = days.count { hasManualExercises(it.dayNumber) }
+}
+
+/**
+ * 训练日的动作挑选策略（纯函数，可单测）。
+ *
+ * ## 优先级
+ * 1. **用户手动指定**（[PlanDraft.dayExercises] 命中）→ 完全按用户所选；
+ * 2. 否则按大类从动作库自动挑（难度低的优先，最多 [MAX_DAILY_EXERCISES] 个）；
+ * 3. 库中该大类无动作 → 空列表（保存时该训练日将没有动作，属数据缺失，需日志提示）。
+ *
+ * @param library 全库动作（按 id 升序传入，保证结果确定）
+ */
+fun resolveDayExercises(
+    day: PlannedDay,
+    library: List<com.feiqi.data.entity.ExerciseEntity>,
+    manual: List<String> = emptyList(),
+    maxCount: Int = MAX_DAILY_EXERCISES,
+): List<com.feiqi.data.entity.ExerciseEntity> {
+    if (manual.isNotEmpty()) {
+        val byName = library.associateBy { it.name }
+        // 只保留库里真实存在的动作名（防止脏数据导致悬空 exerciseId）
+        return manual.mapNotNull { byName[it] }.distinct().take(maxCount)
+    }
+    if (day.isRest) return emptyList()
+    val parts = day.category?.detailParts.orEmpty()
+    if (parts.isEmpty()) return emptyList()
+    return library
+        .filter { it.bodyPart in parts || it.category == day.category?.label }
+        .distinctBy { it.name }
+        .sortedBy { ExerciseDifficulty.fromCode(it.difficulty).ordinal }
+        .take(maxCount)
 }
 
 /** 名称校验（空 / 超长 / 空白）。 */

@@ -62,6 +62,7 @@ internal fun WorkoutScreen(
     planViewModel: WorkoutPlanViewModel,
     onStartTraining: (WorkoutPlan) -> Unit,
     onOpenMyPlans: () -> Unit,
+    onOpenLibrary: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -101,6 +102,11 @@ internal fun WorkoutScreen(
                 modifier = Modifier.padding(top = FeiQiSpacing.md),
             )
 
+            ExerciseLibraryEntryCard(
+                onClick = onOpenLibrary,
+                modifier = Modifier.padding(top = FeiQiSpacing.md),
+            )
+
             WorkoutProgressCard(
                 currentDay = progress.currentDay,
                 completedCount = progress.completedCount,
@@ -136,6 +142,48 @@ internal fun WorkoutScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+    }
+}
+
+/** 动作库入口卡（🏋 + 标题 + 副标题 + 进入）。 */
+@Composable
+private fun ExerciseLibraryEntryCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FeiQiRadius.md))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(FeiQiRadius.md),
+        colors = CardDefaults.cardColors(containerColor = CardAmber),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(FeiQiSpacing.lg),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(text = "\uD83C\uDFCB", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.width(FeiQiSpacing.md))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.exercise_library_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.exercise_library_entry_desc),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = stringResource(R.string.exercise_library_enter),
+                style = MaterialTheme.typography.labelLarge,
+                color = Primary,
+            )
+        }
     }
 }
 

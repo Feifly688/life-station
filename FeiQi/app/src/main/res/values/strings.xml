@@ -78,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.17.0</string>
+    <string name="version_value">v1.18.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -217,6 +217,44 @@
     <string name="workout_create_summary_title">计划概览</string>
     <string name="workout_create_summary_days">周期 %1$d 天，其中 %2$d 天训练</string>
     <string name="workout_create_summary_empty">尚未选择训练部位</string>
+
+    <!-- 动作库 v2 阶段 3 -->
+    <string name="exercise_library_title">动作库</string>
+    <string name="exercise_library_entry_desc">动作要领 · 步骤 · 注意事项</string>
+    <string name="exercise_library_enter">进入</string>
+    <string name="exercise_library_summary">%1$d 个动作 · %2$d 大类</string>
+    <string name="exercise_library_empty">动作库正在准备中</string>
+    <string name="exercise_search_hint">搜索动作名称或目标肌肉</string>
+    <string name="exercise_search_clear">清空搜索</string>
+    <string name="exercise_categories">按部位分类</string>
+    <string name="exercise_all">全部</string>
+    <string name="exercise_all_parts">全身</string>
+    <string name="exercise_show_all">显示全部</string>
+    <string name="exercise_unit_count">%1$d 个动作</string>
+    <string name="exercise_category_count">%1$d 个动作</string>
+    <string name="exercise_no_result">没有找到相关动作\n换个关键词试试</string>
+    <string name="exercise_not_found">动作不存在或已被删除</string>
+
+    <!-- 动作详情 -->
+    <string name="exercise_target">目标</string>
+    <string name="exercise_difficulty">难度</string>
+    <string name="exercise_equipment">器械</string>
+    <string name="exercise_intro">动作介绍</string>
+    <string name="exercise_steps">动作步骤</string>
+    <string name="exercise_tips">注意事项</string>
+
+    <!-- 创建计划里选择动作 -->
+    <string name="exercise_pick_per_day">逐日选择动作</string>
+    <string name="exercise_pick_per_day_hint">可选；不选则保存时按部位自动匹配</string>
+    <string name="exercise_pick_action">选择动作</string>
+    <string name="exercise_pick_auto">未选择 · 将自动匹配</string>
+    <string name="exercise_picked_of">已选 %1$s</string>
+    <string name="exercise_pick_for_day">Day %1$d · %2$s</string>
+    <string name="exercise_picked_count">已选 %1$d / %2$d</string>
+    <string name="exercise_pick_limit">单个训练日最多选择 %1$d 个动作</string>
+    <string name="exercise_pick_at_least_one">请至少选择一个动作</string>
+    <string name="exercise_confirm_picked">完成（%1$d 个动作）</string>
+    <string name="exercise_category_empty">该部位暂时没有动作</string>
     <string name="health_empty_title">还没有体重记录</string>
     <string name="health_empty_desc">记录今天的体重，开始关注身体变化。</string>
     <string name="record_weight_today">今日体重</string>

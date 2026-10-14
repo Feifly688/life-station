@@ -73,6 +73,9 @@ class FeiQiApplication : Application() {
             runCatching {
                 val seeded = container.workoutCatalogRepository.seedOfficialPlanIfEmpty()
                 if (seeded) AppLogger.i("Workout", "官方训练计划已写入计划目录")
+                // v2 阶段 3：动作库内容补全（保 id 幂等，与计划种子解耦）
+                val added = container.workoutCatalogRepository.seedExerciseLibrary()
+                if (added > 0) AppLogger.i("Workout", "动作库补全，新增 $added 个动作")
             }.onFailure { AppLogger.e("Workout", "写入官方训练计划失败", it) }
         }
     }
@@ -123,6 +126,7 @@ class AppContainer(context: Context) {
             FeiQiDatabase.MIGRATION_9_10,
             FeiQiDatabase.MIGRATION_10_11,
             FeiQiDatabase.MIGRATION_11_12,
+            FeiQiDatabase.MIGRATION_12_13,
         )
         .build()
 

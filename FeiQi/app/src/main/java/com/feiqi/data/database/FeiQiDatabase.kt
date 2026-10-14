@@ -32,7 +32,7 @@ import com.feiqi.data.entity.WorkoutRecordEntity
         ExerciseEntity::class,
         WorkoutExerciseEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class FeiQiDatabase : RoomDatabase() {
@@ -180,6 +180,48 @@ abstract class FeiQiDatabase : RoomDatabase() {
          * 本库 `exportSchema = false`（无编译期校验），Room 打开数据库时逐项比对，
          * 多一个或少一个索引都会 `IllegalStateException` 启动即崩。
          */
+        /**
+         * v12 -> v13：**动作库扩展**（健身 v2 第3 阶段）。
+         *
+         * ## 只加列，不动已有列
+         * 全部使用 `ALTER TABLE ... ADD COLUMN` + `NOT NULL DEFAULT`：
+         * SQLite 直接追加列，**不重写表、不动已有行**，
+         * 因此 `workout_exercises.exerciseId` 的 id 引用完全不受影响，
+         * `workout_plans` / `workout_days` / `workout_records` / `workout_exercises`
+         * 四张表**零改动**。
+         *
+         * ## 列名必须逐字一致
+         * `exportSchema = false` 没有编译期校验，迁移 SQL 与 [ExerciseEntity]
+         * 的属性名对不上会在升级校验时闪退。改完请 grep
+         * `app/build/generated/**/FeiQiDatabase_Impl.java` 核对 CREATE TABLE。
+         *
+         * ## 默认值
+         * 老数据的 `category` / `targetMuscle` / `steps` / `tips` 迁移后为空串，
+         * 由启动时的 `seedExerciseLibrary()` 补齐（保 id 更新）。
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `category` TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `targetMuscle` TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `equipment` TEXT NOT NULL DEFAULT 'NONE'"
+                )
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `steps` TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `tips` TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE `exercises` ADD COLUMN `videoUrl` TEXT NOT NULL DEFAULT ''"
+                )
+            }
+        }
+
         val MIGRATION_11_12 = object : Migration(11, 12) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

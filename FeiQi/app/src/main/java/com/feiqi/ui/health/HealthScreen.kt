@@ -78,6 +78,7 @@ fun HealthScreen(
     viewModel: HealthViewModel,
     workoutViewModel: WorkoutViewModel,
     workoutPlanViewModel: WorkoutPlanViewModel,
+    exerciseViewModel: ExerciseViewModel,
     modifier: Modifier = Modifier
 ) {
     val records by viewModel.records.collectAsStateWithLifecycle()
@@ -94,6 +95,8 @@ fun HealthScreen(
     // 健身：单一覆盖层状态机（首页/ 我的计划 / 创建计划 / 训练详情），避免多布尔互相牵制
     var workoutOverlay by remember { mutableStateOf(WorkoutOverlay.None) }
     var workoutDetailPlan by remember { mutableStateOf<com.feiqi.data.model.WorkoutPlan?>(null) }
+    // 动作库：详情页记录当前动作 id
+    var exerciseDetailId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { toastMessage = it }
@@ -205,7 +208,17 @@ fun HealthScreen(
             planViewModel = workoutPlanViewModel,
             onStartTraining = { plan -> workoutDetailPlan = plan },
             onOpenMyPlans = { workoutOverlay = WorkoutOverlay.MyPlans },
+            onOpenLibrary = { workoutOverlay = WorkoutOverlay.ExerciseLibrary },
             onBack = { workoutOverlay = WorkoutOverlay.None },
+        )
+
+        WorkoutOverlay.ExerciseLibrary -> ExerciseLibraryScreen(
+            viewModel = exerciseViewModel,
+            onOpenDetail = { id -> exerciseDetailId = id },
+            onBack = {
+                exerciseDetailId = null
+                workoutOverlay = WorkoutOverlay.Home
+            },
         )
 
         WorkoutOverlay.MyPlans -> MyWorkoutPlansScreen(
@@ -220,6 +233,7 @@ fun HealthScreen(
 
         WorkoutOverlay.Create -> CreateWorkoutPlanScreen(
             viewModel = workoutPlanViewModel,
+            exerciseViewModel = exerciseViewModel,
             onSaved = { planId ->
                 // 新建后自动切到该计划，用户立刻能看到「今日训练」
                 workoutViewModel.selectPlan(planId)
@@ -237,6 +251,15 @@ fun HealthScreen(
             alreadyCheckedIn = plan.dayNumber in completedDays,
             onCheckIn = { workoutViewModel.checkIn(plan.dayNumber) },
             onBack = { workoutDetailPlan = null },
+        )
+    }
+
+    // 动作详情（最上层，盖在动作库之上）
+    exerciseDetailId?.let { id ->
+        ExerciseDetailScreen(
+            exerciseId = id,
+            viewModel = exerciseViewModel,
+            onBack = { exerciseDetailId = null },
         )
     }
 
@@ -262,6 +285,9 @@ internal enum class WorkoutOverlay {
 
     /** 创建训练计划向导。 */
     Create,
+
+    /** 动作库。 */
+    ExerciseLibrary,
 }
 
 @Composable

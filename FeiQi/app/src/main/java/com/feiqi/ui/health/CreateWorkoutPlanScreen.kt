@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.feiqi.R
 import com.feiqi.data.model.BodyCategory
 import com.feiqi.data.model.MAX_PLAN_NAME_LENGTH
+import com.feiqi.data.model.PlannedDay
 import com.feiqi.data.model.WORKOUT_CYCLE_OPTIONS
 import com.feiqi.data.model.WORKOUT_FREQUENCY_OPTIONS
 import com.feiqi.data.model.WorkoutGoal
@@ -86,11 +88,14 @@ import kotlin.math.ceil
 @Composable
 internal fun CreateWorkoutPlanScreen(
     viewModel: WorkoutPlanViewModel,
+    exerciseViewModel: ExerciseViewModel,
     onSaved: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var step by remember { mutableIntStateOf(0) }
+    // 非null = 正在为该训练日挑动作（动作选择页覆盖在本页之上）
+    var pickingDay by remember { mutableStateOf<Int?>(null) }
     val name by viewModel.name.collectAsStateWithLifecycle()
     val goal by viewModel.goal.collectAsStateWithLifecycle()
     val cycleDays by viewModel.cycleDays.collectAsStateWithLifecycle()
@@ -182,6 +187,11 @@ internal fun CreateWorkoutPlanScreen(
                     categories = categories,
                     onToggleCategory = viewModel::toggleCategory,
                     trainingDayCount = draft.trainingDayCount,
+                    trainingDays = draft.days.filter { !it.isRest },
+                    dayExercises = draft.dayExercises,
+                    onPickExercises = { day ->
+                        pickingDay = day.dayNumber
+                    },
                 )
 
                 Spacer(modifier = Modifier.height(FeiQiSpacing.xl))
@@ -235,6 +245,26 @@ internal fun CreateWorkoutPlanScreen(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
+
+        // 动作选择页：盖在向导之上，选完回填该训练日
+        pickingDay?.let { dayNumber ->
+            val planned = draft.days.firstOrNull { it.dayNumber == dayNumber }
+            ExercisePickerScreen(
+                title = stringResource(
+                    R.string.exercise_pick_for_day,
+                    dayNumber,
+                    planned?.category?.label.orEmpty(),
+                ),
+                initialCategory = planned?.category,
+                initialPicked = viewModel.dayExercisesOf(dayNumber),
+                viewModel = exerciseViewModel,
+                onConfirm = { picked ->
+                    viewModel.setDayExercises(dayNumber, picked)
+                    pickingDay = null
+                },
+                onBack = { pickingDay = null },
+            )
+        }
     }
 }
 
@@ -490,7 +520,7 @@ private fun StepFrequencySection(
 
 /** 一周排布预览：7 个小格，训练日高亮 + 「练」，休息日「休」。 */
 @Composable
-private fun WeekPreview(days: List<com.feiqi.data.model.PlannedDay>) {
+private fun WeekPreview(days: List<PlannedDay>) {
     val firstWeek = days.take(7)
     val trainingCount = firstWeek.count { !it.isRest }
     val perWeek = ceil(days.size / 7.0).toInt().coerceAtLeast(1)
@@ -498,7 +528,7 @@ private fun WeekPreview(days: List<com.feiqi.data.model.PlannedDay>) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.xs),
     ) {
-        firstWeek.forEach { planned ->
+        firstWeek.forEach { planned: PlannedDay ->
             val isTraining = !planned.isRest
             Column(
                 modifier = Modifier
@@ -549,6 +579,9 @@ private fun StepDaysSection(
     categories: List<BodyCategory>,
     onToggleCategory: (BodyCategory) -> Unit,
     trainingDayCount: Int,
+    trainingDays: List<PlannedDay>,
+    dayExercises: Map<Int, List<String>>,
+    onPickExercises: (PlannedDay) -> Unit,
 ) {
     StepSection(visible) {
         Column {
@@ -558,6 +591,25 @@ private fun StepDaysSection(
             )
             Spacer(modifier = Modifier.height(FeiQiSpacing.md))
             BodyCategoryGrid(selected = categories, onToggle = onToggleCategory)
+
+            if (trainingDays.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(FeiQiSpacing.xl))
+                SectionTitle(
+                    text = stringResource(R.string.exercise_pick_per_day),
+                    subtitle = stringResource(R.string.exercise_pick_per_day_hint),
+                )
+                Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
+                Column(verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.sm)) {
+                    trainingDays.forEach { planned ->
+                        DayExerciseRow(
+                            dayNumber = planned.dayNumber,
+                            category = planned.category,
+                            pickedNames = dayExercises[planned.dayNumber].orEmpty(),
+                            onClick = { onPickExercises(planned) },
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(FeiQiSpacing.xl))
             Card(
@@ -591,6 +643,54 @@ private fun StepDaysSection(
                 }
             }
         }
+    }
+}
+
+/** 训练日一行：Day N · 部位 · 已选动作数 · 「选择动作 ›」。 */
+@Composable
+private fun DayExerciseRow(
+    dayNumber: Int,
+    category: BodyCategory?,
+    pickedNames: List<String>,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(FeiQiRadius.md))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(FeiQiSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "Day $dayNumber · ${category?.displayParts ?: "休息"}",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = if (pickedNames.isEmpty()) {
+                    stringResource(R.string.exercise_pick_auto)
+                } else {
+                    stringResource(R.string.exercise_picked_of, pickedNames.joinToString("、"))
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.width(FeiQiSpacing.sm))
+        Text(
+            text = stringResource(R.string.exercise_pick_action) + " ›",
+            style = MaterialTheme.typography.labelLarge,
+            color = Primary,
+            maxLines = 1,
+        )
     }
 }
 
