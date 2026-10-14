@@ -2,10 +2,12 @@ package com.feiqi.ui.health
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -66,6 +69,7 @@ import com.feiqi.data.model.WORKOUT_CYCLE_OPTIONS
 import com.feiqi.data.model.WORKOUT_FREQUENCY_OPTIONS
 import com.feiqi.data.model.WorkoutGoal
 import com.feiqi.ui.theme.CardAmber
+import com.feiqi.ui.theme.FeiQiMotion
 import com.feiqi.ui.theme.FeiQiRadius
 import com.feiqi.ui.theme.FeiQiSpacing
 import com.feiqi.ui.theme.OnPrimary
@@ -115,6 +119,9 @@ internal fun CreateWorkoutPlanScreen(
         stringResource(R.string.workout_step_frequency),
         stringResource(R.string.workout_step_days),
     )
+
+    // 动作选择页是盖在本页之上的覆盖层：返回必须先关它，而不是退出整个创建向导
+    BackHandler(enabled = pickingDay != null) { pickingDay = null }
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(modifier = Modifier.fillMaxSize().imePadding()) {
@@ -268,27 +275,42 @@ internal fun CreateWorkoutPlanScreen(
     }
 }
 
-/** 顶部进度条（分段）。 */
+/**
+ * 顶部步骤指示：`● ● ○ ○` 四点式（已走过的点为暖色实心，未来步骤为空心）。
+ *
+ * 相比分段横条，点状在四步这种小数量下更接近"走到第几步"的直觉读法，
+ * 且不占垂直空间。状态只改颜色与尺寸，**不增删节点**（避免布局跳变）。
+ */
 @Composable
 private fun StepProgressBar(step: Int, total: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = FeiQiSpacing.lg),
-        horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         repeat(total) { index ->
-            val active = index <= step
+            val done = index < step
+            val active = index == step
             val color by animateColorAsState(
-                targetValue = if (active) Primary else MaterialTheme.colorScheme.outlineVariant,
-                animationSpec = tween(220),
-                label = "stepBar",
+                targetValue = when {
+                    done -> Primary.copy(alpha = 0.45f)
+                    active -> Primary
+                    else -> MaterialTheme.colorScheme.outlineVariant
+                },
+                animationSpec = tween(FeiQiMotion.normal),
+                label = "stepDotColor",
+            )
+            val size by animateDpAsState(
+                targetValue = if (active) FeiQiSpacing.sm else FeiQiSpacing.xs,
+                animationSpec = tween(FeiQiMotion.normal),
+                label = "stepDotSize",
             )
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
+                    .size(size)
+                    .clip(CircleShape)
                     .background(color),
             )
         }

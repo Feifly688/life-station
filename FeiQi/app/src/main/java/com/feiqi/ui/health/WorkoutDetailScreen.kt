@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,8 +64,17 @@ internal fun WorkoutDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var doneExercises by remember(plan.dayNumber) { mutableStateOf(setOf<Int>()) }
-    var celebrated by remember(plan.dayNumber) { mutableStateOf(false) }
+    // 逐组完成状态用 rememberSaveable：旋转屏幕 / 进程重建后训练进度不丢。
+    // Set<Int> 不是 Saveable 能直接存的类型，这里用逗号串做编码（空集 = 空串）。
+    var doneIndexesRaw by rememberSaveable(plan.dayNumber) { mutableStateOf("") }
+    val doneExercises: Set<Int> = remember(doneIndexesRaw) {
+        if (doneIndexesRaw.isEmpty()) {
+            emptySet()
+        } else {
+            doneIndexesRaw.split(',').mapNotNull { it.toIntOrNull() }.toSet()
+        }
+    }
+    var celebrated by rememberSaveable(plan.dayNumber) { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val allDone = doneExercises.size >= plan.exercises.size
@@ -107,7 +117,7 @@ internal fun WorkoutDetailScreen(
 
             Spacer(modifier = Modifier.height(FeiQiSpacing.md))
             plan.exercises.forEachIndexed { index, exercise ->
-                ExerciseCard(
+                TrainingExerciseCard(
                     exercise = exercise,
                     done = index in doneExercises,
                     modifier = Modifier.padding(bottom = FeiQiSpacing.sm),
@@ -115,11 +125,10 @@ internal fun WorkoutDetailScreen(
                 CompleteSetButton(
                     done = index in doneExercises,
                     onClick = {
-                        doneExercises = if (index in doneExercises) {
-                            doneExercises - index
-                        } else {
-                            doneExercises + index
-                        }
+                        val next =
+                            if (index in doneExercises) doneExercises - index
+                            else doneExercises + index
+                        doneIndexesRaw = next.sorted().joinToString(",")
                     },
                     modifier = Modifier.padding(bottom = FeiQiSpacing.sm),
                 )

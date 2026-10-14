@@ -42,6 +42,7 @@ import com.feiqi.ui.theme.FeiQiMotion
 import com.feiqi.ui.theme.FeiQiRadius
 import com.feiqi.ui.theme.FeiQiSpacing
 import com.feiqi.ui.theme.Outline
+import androidx.compose.ui.text.style.TextOverflow
 import com.feiqi.ui.theme.Primary
 
 /**
@@ -51,14 +52,20 @@ import com.feiqi.ui.theme.Primary
  * 动效统一 200ms / [FastOutSlowInEasing]。
  */
 
-/** 计划总览卡：Day x / 30 + 完成进度条 + 完成次数。 */
+/**
+ * 计划总览卡：Day x / N + 完成进度条 + 完成次数。
+ *
+ * v2 阶段 4：标题改用**真实计划名**（此前硬编码「30天居家爆炸训练」，
+ * 切到自建计划后文案仍是错的）；**移除连续天数文案** ——
+ * 顶部已有「真实日历连续」，两套口径同屏会出现两个含义不同的连续数字。
+ */
 @Composable
 internal fun WorkoutProgressCard(
     currentDay: Int,
     completedCount: Int,
     totalDays: Int,
     percent: Float,
-    streak: Int,
+    planName: String,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -69,9 +76,11 @@ internal fun WorkoutProgressCard(
     ) {
         Column(modifier = Modifier.padding(FeiQiSpacing.lg)) {
             Text(
-                text = "30天居家爆炸训练",
+                text = planName,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,7 +114,7 @@ internal fun WorkoutProgressCard(
             )
             Spacer(modifier = Modifier.height(FeiQiSpacing.xs))
             Text(
-                text = "完成进度 ${percent.toInt()}%${if (streak > 0) "　·　连续 $streak 天" else ""}",
+                text = "完成进度 ${percent.toInt()}%",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -113,9 +122,14 @@ internal fun WorkoutProgressCard(
     }
 }
 
-/** 动作卡：动作名 + 组数/次数/时长 + 备注 + 已完成态。 */
+/**
+ * 训练日动作卡：动作名 + 组数/次数/时长 + 备注 + 已完成态。
+ *
+ * v2 阶段 4 更名为 `TrainingExerciseCard`：动作库侧也有一个 `ExerciseCard`
+ * （收 `ExerciseEntity`），同名不同签名会让后续维护踩坑。
+ */
 @Composable
-internal fun ExerciseCard(
+internal fun TrainingExerciseCard(
     exercise: Exercise,
     done: Boolean,
     modifier: Modifier = Modifier,

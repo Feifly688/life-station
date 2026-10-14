@@ -19,6 +19,17 @@ interface WorkoutDao {
     @Query("SELECT COUNT(*) FROM workout_records WHERE planId = :planId AND dayNumber = :dayNumber")
     suspend fun countByDay(planId: String, dayNumber: Int): Int
 
+    /**
+     * **全部**计划的打卡记录（v2 阶段 4：顶部统计用）。
+     *
+     * 连续训练 / 本月完成 / 累计时长都是**跨计划**口径，故不能复用
+     * [observeByPlan]（它带 `WHERE planId = :planId` 过滤）。
+     *
+     * 只新增查询，不改表结构。
+     */
+    @Query("SELECT * FROM workout_records ORDER BY completedAt ASC")
+    fun observeAll(): Flow<List<WorkoutRecordEntity>>
+
     /** 已完成的天数集合（派生进度 / 连续天数用）。 */
     @Query("SELECT dayNumber FROM workout_records WHERE planId = :planId")
     fun observeCompletedDays(planId: String): Flow<List<Int>>

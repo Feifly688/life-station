@@ -1,5 +1,6 @@
 package com.feiqi.ui.health
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,11 +40,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
@@ -54,6 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.feiqi.R
 import com.feiqi.data.model.BmiScale
+import com.feiqi.data.model.estimateDaySeconds
+import com.feiqi.data.model.estimatedDurationLabel
+import com.feiqi.data.model.secondsToMinutes
 import com.feiqi.data.model.UserProfile
 import com.feiqi.data.model.WeightRecord
 import com.feiqi.ui.components.ConfirmDialog
@@ -87,16 +94,60 @@ fun HealthScreen(
     var showProfileDialog by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<WeightRecord?>(null) }
     var chartRange by remember { mutableStateOf(WeightChartRange.DAY) }
-    // 健身：null = 不显示；非 null = 健身主页覆盖层；详情页同理
+    // ---------------- 健身（v2 阶段 4：健康页以健身为主） ----------------
+    // 计划内进度（Day x / N）
     val workoutProgress by workoutViewModel.progress.collectAsStateWithLifecycle()
-    val workoutStreak by workoutViewModel.streak.collectAsStateWithLifecycle()
-    val workoutSummary = "Day ${workoutProgress.currentDay}/30 · 已完成 ${workoutProgress.completedCount} 次" +
-        if (workoutStreak > 0) " · 连续 $workoutStreak 天" else ""
-    // 健身：单一覆盖层状态机（首页/ 我的计划 / 创建计划 / 训练详情），避免多布尔互相牵制
-    var workoutOverlay by remember { mutableStateOf(WorkoutOverlay.None) }
-    var workoutDetailPlan by remember { mutableStateOf<com.feiqi.data.model.WorkoutPlan?>(null) }
-    // 动作库：详情页记录当前动作 id
-    var exerciseDetailId by remember { mutableStateOf<Long?>(null) }
+    val workoutTotalDays by workoutViewModel.totalDays.collectAsStateWithLifecycle()
+    val runtimePlan by workoutViewModel.runtimePlan.collectAsStateWithLifecycle()
+    val activePlanId by workoutViewModel.activePlanId.collectAsStateWithLifecycle()
+    val allPlans by workoutPlanViewModel.plans.collectAsStateWithLifecycle()
+    val userPlans by workoutPlanViewModel.userPlans.collectAsStateWithLifecycle()
+    // 跨计划统计（真实日历连续 / 本月 / 累计估算时长）
+    val calendarStreak by workoutViewModel.calendarStreak.collectAsStateWithLifecycle()
+    val monthStat by workoutViewModel.monthProgress.collectAsStateWithLifecycle()
+    val totalSeconds by workoutViewModel.totalEstimatedSeconds.collectAsStateWithLifecycle()
+    // 历史详情页需要按 (planId, dayNumber) 反查原始记录，故一并收集
+    val allRecordsSnapshot by workoutViewModel.allRecords.collectAsStateWithLifecycle()
+
+    val todayPlan = remember(runtimePlan, workoutProgress.currentDay) {
+        runtimePlan.firstOrNull { it.dayNumber == workoutProgress.currentDay } ?: runtimePlan.lastOrNull()
+    }
+    val todayMinutes = remember(todayPlan) { secondsToMinutes(estimateDaySeconds(todayPlan)) }
+
+    /** 当前计划名（进度卡标题用；此前硬编码「30天居家爆炸训练」，换计划就错了）。 */
+    val currentPlanName = allPlans.firstOrNull { it.planId == activePlanId }?.name
+        ?: stringResource(R.string.workout_official_plans)
+
+    /**
+     * 覆盖层状态一律 [rememberSaveable]：旋转屏幕 / 进程重建后仍停在原来那一层，
+     * 否则会被踢回健康页（v2 阶段 4 修复的状态丢失）。
+     * 枚举存 name 字符串（枚举本身不是 Saveable），-1 表示「无」。
+     */
+    var workoutOverlayName by rememberSaveable { mutableStateOf(WorkoutOverlay.None.name) }
+    var workoutDetailDay by rememberSaveable { mutableStateOf(-1L) }
+    var exerciseDetailId by rememberSaveable { mutableStateOf(-1L) }
+    var historyRecordKey by rememberSaveable { mutableStateOf("") }
+
+    val workoutOverlay = WorkoutOverlay.valueOf(workoutOverlayName)
+    val workoutDetailPlan = remember(workoutDetailDay, runtimePlan) {
+        if (workoutDetailDay <= 0L) null
+        else runtimePlan.firstOrNull { it.dayNumber == workoutDetailDay.toInt() }
+    }
+    val exerciseDetail = exerciseDetailId.takeIf { it > 0L }
+    val historyRecord = remember(historyRecordKey, allRecordsSnapshot) {
+        historyRecordKey.takeIf { it.isNotBlank() }?.let { key ->
+            val sep = key.lastIndexOf('#')
+            val planId = key.substring(0, sep)
+            val day = key.substring(sep + 1).toIntOrNull()
+            allRecordsSnapshot.firstOrNull { it.planId == planId && it.dayNumber == day }
+        }
+    }
+
+    /** 健身任一层可见（用于决定是否接管系统返回键）。 */
+    val workoutVisible = workoutOverlay != WorkoutOverlay.None ||
+        exerciseDetail != null ||
+        workoutDetailPlan != null ||
+        historyRecord != null
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { toastMessage = it }
@@ -118,26 +169,85 @@ fun HealthScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            WorkoutEntryCard(
-                summary = workoutSummary,
-                onClick = { workoutOverlay = WorkoutOverlay.Home },
+            // ============ 1. 健身中心（健康页主功能） ============
+            WorkoutHeroPanel(
+                streakDays = calendarStreak,
+                month = monthStat,
+                totalLabel = estimatedDurationLabel(totalSeconds),
+                onClick = { workoutOverlayName = WorkoutOverlay.Home.name },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            PersonalInfoCard(
-                profile = profile,
+            if (todayPlan != null) {
+                TodayWorkoutCard(
+                    plan = todayPlan,
+                    estimatedMinutes = todayMinutes,
+                    difficultyLabel = null,
+                    onStart = { workoutDetailDay = todayPlan.dayNumber.toLong() },
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // ============ 2. 我的训练计划 ============
+            SectionHeader(
+                title = stringResource(R.string.workout_plans_section),
+                actionLabel = stringResource(R.string.workout_my_plans),
+                onAction = { workoutOverlayName = WorkoutOverlay.MyPlans.name },
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (userPlans.isEmpty() && allPlans.isEmpty()) {
+                WorkoutEmptyState(
+                    emoji = "📋",
+                    title = stringResource(R.string.workout_create_first_plan),
+                    actionLabel = stringResource(R.string.workout_create_plan),
+                    onAction = { workoutOverlayName = WorkoutOverlay.Create.name },
+                )
+            } else {
+                PlanStrip(
+                    plans = allPlans,
+                    activePlanId = activePlanId,
+                    onSelect = workoutViewModel::selectPlan,
+                    onOpenAll = { workoutOverlayName = WorkoutOverlay.MyPlans.name },
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 计划内进度（与「本月训练」是两条独立口径，分开呈现）
+            WorkoutProgressCard(
+                currentDay = workoutProgress.currentDay,
+                completedCount = workoutProgress.completedCount,
+                totalDays = workoutTotalDays,
+                percent = workoutProgress.percent,
+                planName = currentPlanName,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ============ 3. 健康数据（体重降级为辅助） ============
+            SectionHeader(
+                title = stringResource(R.string.workout_health_section),
+                modifier = Modifier.padding(top = 8.dp),
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            WeightSummaryCard(
                 latestWeight = latestWeight,
-                onEdit = { showProfileDialog = true }
+                bmi = profile.bmi(latestWeight),
+                onEdit = { showProfileDialog = true },
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             WeightInputCard(
                 onSave = { weight, date, note -> viewModel.addRecord(weight, date, note) }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             WeightCurveCard(
                 points = chartPoints,
@@ -145,21 +255,21 @@ fun HealthScreen(
                 onRangeChange = { chartRange = it }
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = stringResource(R.string.recent_trace),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (records.isEmpty()) {
                 EmptyState(
                     title = stringResource(R.string.health_empty_title),
                     description = stringResource(R.string.health_empty_desc),
-                    modifier = Modifier.padding(vertical = 24.dp)
+                    modifier = Modifier.padding(vertical = 16.dp)
                 )
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -199,36 +309,73 @@ fun HealthScreen(
         )
     }
 
-    // 健身二级页：按覆盖层状态渲染（详情页盖在主页之上）
+    // ============ 覆盖层互斥护栏 ============
+    // 详情类状态各自独立，若同时非全会叠出两层空白/错位页面。
+    // 这里集中收敛：打开任一详情先关掉其它详情，保证「最多一层详情」。
+    LaunchedEffect(exerciseDetail, workoutDetailPlan, historyRecord, workoutOverlay) {
+        if (exerciseDetail != null && workoutDetailPlan != null) workoutDetailDay = -1L
+        if (exerciseDetail != null && historyRecord != null) historyRecordKey = ""
+        if (workoutDetailPlan != null && historyRecord != null) historyRecordKey = ""
+        // 详情盖在二级页之上时，二级页状态保持不变（返回时才用到），但详情互斥
+    }
+
+    /**
+     * 健身覆盖层的系统返回（含**屏幕边缘向内划**手势）。
+     *
+     * 关闭顺序：动作详情 → 历史详情 → 训练详情 → 动作库/创建计划 → 健身主页 → 健康主页。
+     * 全部关完才交回外层（此时在五个主页面之一，由 MainActivity 决定是否退出）。
+     */
+    BackHandler(enabled = workoutVisible) {
+        when {
+            exerciseDetail != null -> exerciseDetailId = -1L
+            historyRecord != null -> historyRecordKey = ""
+            workoutDetailPlan != null -> workoutDetailDay = -1L
+            workoutOverlay == WorkoutOverlay.ExerciseLibrary ||
+                workoutOverlay == WorkoutOverlay.Create -> workoutOverlayName = WorkoutOverlay.Home.name
+            workoutOverlay == WorkoutOverlay.MyPlans -> workoutOverlayName = WorkoutOverlay.Home.name
+            workoutOverlay == WorkoutOverlay.Home -> workoutOverlayName = WorkoutOverlay.None.name
+        }
+    }
+
+    // 健身二级页：按覆盖层状态渲染（详情页盖在其上）
     when (workoutOverlay) {
         WorkoutOverlay.None -> Unit
 
         WorkoutOverlay.Home -> WorkoutScreen(
             viewModel = workoutViewModel,
             planViewModel = workoutPlanViewModel,
-            onStartTraining = { plan -> workoutDetailPlan = plan },
-            onOpenMyPlans = { workoutOverlay = WorkoutOverlay.MyPlans },
-            onOpenLibrary = { workoutOverlay = WorkoutOverlay.ExerciseLibrary },
-            onBack = { workoutOverlay = WorkoutOverlay.None },
+            onStartTraining = { plan -> workoutDetailDay = plan.dayNumber.toLong() },
+            onOpenMyPlans = { workoutOverlayName = WorkoutOverlay.MyPlans.name },
+            onOpenLibrary = { workoutOverlayName = WorkoutOverlay.ExerciseLibrary.name },
+            onOpenHistory = { day ->
+                historyRecordKey = "${workoutViewModel.activePlanId.value}#$day"
+            },
+            onBack = { workoutOverlayName = WorkoutOverlay.None.name },
         )
 
         WorkoutOverlay.ExerciseLibrary -> ExerciseLibraryScreen(
             viewModel = exerciseViewModel,
             onOpenDetail = { id -> exerciseDetailId = id },
             onBack = {
-                exerciseDetailId = null
-                workoutOverlay = WorkoutOverlay.Home
+                // 显式清空详情 id，防止关闭动作库后详情层仍残留
+                exerciseDetailId = -1L
+                workoutOverlayName = WorkoutOverlay.Home.name
             },
         )
 
         WorkoutOverlay.MyPlans -> MyWorkoutPlansScreen(
             planViewModel = workoutPlanViewModel,
-            onCreatePlan = { workoutOverlay = WorkoutOverlay.Create },
+            completedCountByPlan = remember(allRecordsSnapshot) {
+                allRecordsSnapshot
+                    .groupingBy { it.planId }
+                    .eachCount()
+            },
+            onCreatePlan = { workoutOverlayName = WorkoutOverlay.Create.name },
             onStartPlan = { planId ->
                 workoutViewModel.selectPlan(planId)
-                workoutOverlay = WorkoutOverlay.Home
+                workoutOverlayName = WorkoutOverlay.Home.name
             },
-            onBack = { workoutOverlay = WorkoutOverlay.Home },
+            onBack = { workoutOverlayName = WorkoutOverlay.Home.name },
         )
 
         WorkoutOverlay.Create -> CreateWorkoutPlanScreen(
@@ -237,9 +384,21 @@ fun HealthScreen(
             onSaved = { planId ->
                 // 新建后自动切到该计划，用户立刻能看到「今日训练」
                 workoutViewModel.selectPlan(planId)
-                workoutOverlay = WorkoutOverlay.Home
+                workoutOverlayName = WorkoutOverlay.Home.name
             },
-            onBack = { workoutOverlay = WorkoutOverlay.MyPlans },
+            onBack = { workoutOverlayName = WorkoutOverlay.MyPlans.name },
+        )
+    }
+
+    // 历史详情（训练记录查看，不可撤销）
+    historyRecord?.let { record ->
+        val plan = remember(record.planId, record.dayNumber, runtimePlan) {
+            runtimePlan.firstOrNull { it.dayNumber == record.dayNumber }
+        }
+        WorkoutHistoryDetailScreen(
+            record = record,
+            plan = plan,
+            onBack = { historyRecordKey = "" },
         )
     }
 
@@ -250,16 +409,16 @@ fun HealthScreen(
             plan = plan,
             alreadyCheckedIn = plan.dayNumber in completedDays,
             onCheckIn = { workoutViewModel.checkIn(plan.dayNumber) },
-            onBack = { workoutDetailPlan = null },
+            onBack = { workoutDetailDay = -1L },
         )
     }
 
     // 动作详情（最上层，盖在动作库之上）
-    exerciseDetailId?.let { id ->
+    exerciseDetail?.let { id ->
         ExerciseDetailScreen(
             exerciseId = id,
             viewModel = exerciseViewModel,
-            onBack = { exerciseDetailId = null },
+            onBack = { exerciseDetailId = -1L },
         )
     }
 
@@ -1062,19 +1221,90 @@ private fun trimNumber(value: Double): String {
     }
 }
 
-/** 健身入口卡：点击进入 30 天居家训练主页（作为健康页的二级页，不新增底部导航 Tab）。 */
+// ---------------- 计划条（健康页「我的训练计划」区） ----------------
+
+/**
+ * 横向滚动的计划切换条：官方 + 用户计划均可直接切换。
+ *
+ * 从健身主页搬来的同一套交互，健康页也能直接换计划而不必先进二级页。
+ */
 @Composable
-private fun WorkoutEntryCard(
-    summary: String,
-    onClick: () -> Unit,
+private fun PlanStrip(
+    plans: List<com.feiqi.data.entity.WorkoutPlanEntity>,
+    activePlanId: String,
+    onSelect: (String) -> Unit,
+    onOpenAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (plans.isEmpty()) {
+            Text(
+                text = stringResource(R.string.workout_my_plans_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                plans.forEach { plan ->
+                    val active = plan.planId == activePlanId
+                    Text(
+                        text = plan.name,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (active) Primary else SurfaceVariant)
+                            .pressable { onSelect(plan.planId) }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = stringResource(R.string.workout_my_plans) + " ›",
+            style = MaterialTheme.typography.labelLarge,
+            color = Primary,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .pressable(onClick = onOpenAll)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+        )
+    }
+}
+
+// ---------------- 健康数据（体重降级为辅助卡） ----------------
+
+/**
+ * 健康数据摘要卡：体重 + BMI + 记录入口。
+ *
+ * v2 阶段 4 之前这里是「个人信息大卡 + 独立输入卡」两块，占掉健康页主视觉；
+ * 现在压成一张小卡，把主视觉让给健身。
+ */
+@Composable
+private fun WeightSummaryCard(
+    latestWeight: Double?,
+    bmi: Double?,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardAmber),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -1082,23 +1312,45 @@ private fun WorkoutEntryCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.workout_entry_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    text = stringResource(R.string.weight_kg),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = latestWeight?.let { String.format(java.util.Locale.US, "%.1f", it) } ?: "--",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "kg",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
+                    if (bmi != null) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = BmiScale.label(bmi),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(100.dp))
+                                .background(Tertiary.copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+            TextButton(onClick = onEdit) {
                 Text(
-                    text = summary,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = stringResource(R.string.edit_personal_info),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Primary
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "开始",
-                style = MaterialTheme.typography.labelLarge,
-                color = Primary,
-            )
         }
     }
 }

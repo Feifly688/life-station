@@ -27,6 +27,14 @@ class WorkoutRepository(private val dao: WorkoutDao) {
         dao.observeByPlan(planId)
 
     /**
+     * **全部**计划的打卡记录（v2 阶段 4）。
+     *
+     * 顶部「连续训练 / 本月完成 / 累计时长」都是**跨计划**口径 ——
+     * 换计划不清零、切官方与自建计划时统计连续。
+     */
+    fun allRecords(): Flow<List<WorkoutRecordEntity>> = dao.observeAll()
+
+    /**
      * 已完成的天数（含别名合并）。
      *
      * 官方计划会同时读取 `home_beginner_30` 与 `home30`，取并集。

@@ -42,8 +42,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.feiqi.R
-import com.feiqi.data.model.WORKOUT_PLANS
 import com.feiqi.data.model.WorkoutPlan
+import com.feiqi.data.model.estimateDaySeconds
+import com.feiqi.data.model.secondsToMinutes
 import com.feiqi.ui.theme.CardAmber
 import com.feiqi.ui.theme.FeiQiRadius
 import com.feiqi.ui.theme.FeiQiSpacing
@@ -63,11 +64,11 @@ internal fun WorkoutScreen(
     onStartTraining: (WorkoutPlan) -> Unit,
     onOpenMyPlans: () -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenHistory: (Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val progress by viewModel.progress.collectAsStateWithLifecycle()
-    val streak by viewModel.streak.collectAsStateWithLifecycle()
     val completedDays by viewModel.completedDayList.collectAsStateWithLifecycle()
     val runtimePlan by viewModel.runtimePlan.collectAsStateWithLifecycle()
     val totalDays by viewModel.totalDays.collectAsStateWithLifecycle()
@@ -112,13 +113,19 @@ internal fun WorkoutScreen(
                 completedCount = progress.completedCount,
                 totalDays = totalDays,
                 percent = progress.percent,
-                streak = streak,
+                planName = runtimePlan.firstOrNull()?.title?.substringAfter("· ")?.trim()
+                    ?: allPlans.firstOrNull { it.planId == activePlanId }?.name
+                    ?: stringResource(R.string.workout_title),
                 modifier = Modifier.padding(top = FeiQiSpacing.md),
             )
 
             if (todayPlan != null) {
-                TodayPlanCard(
+                TodayWorkoutCard(
                     plan = todayPlan,
+                    estimatedMinutes = remember(todayPlan) {
+                        secondsToMinutes(estimateDaySeconds(todayPlan))
+                    },
+                    difficultyLabel = null,
                     onStart = { onStartTraining(todayPlan) },
                     modifier = Modifier.padding(top = FeiQiSpacing.lg),
                 )
@@ -128,13 +135,19 @@ internal fun WorkoutScreen(
                 title = stringResource(R.string.workout_history),
                 modifier = Modifier.padding(top = FeiQiSpacing.lg),
             )
-            DayHistoryGrid(
-                totalDays = totalDays,
-                completedDays = completedDays,
-                onDayClick = { day ->
-                    if (day in completedDays) viewModel.undo(day)
-                },
-            )
+            if (completedDays.isEmpty()) {
+                WorkoutEmptyState(
+                    emoji = "🏆",
+                    title = stringResource(R.string.workout_history_empty),
+                    description = stringResource(R.string.workout_history_empty_desc),
+                )
+            } else {
+                DayHistoryGrid(
+                    totalDays = totalDays,
+                    completedDays = completedDays,
+                    onDayClick = { day -> if (day in completedDays) onOpenHistory(day) },
+                )
+            }
             Spacer(modifier = Modifier.height(FeiQiSpacing.xl))
         }
 
@@ -259,84 +272,6 @@ private fun HeaderRow(onBack: () -> Unit) {
     }
 }
 
-/** 今日训练卡：部位标签 + 动作列表 + 开始按钮。 */
-@Composable
-private fun TodayPlanCard(
-    plan: WorkoutPlan,
-    onStart: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(FeiQiRadius.md),
-        colors = CardDefaults.cardColors(containerColor = CardAmber),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(modifier = Modifier.padding(FeiQiSpacing.lg)) {
-            Text(
-                text = stringResource(R.string.workout_today),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(FeiQiSpacing.xs))
-            Text(
-                text = "🔥 ${plan.bodyParts}",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(modifier = Modifier.height(FeiQiSpacing.xs))
-            Text(
-                text = plan.description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(FeiQiSpacing.md))
-            plan.exercises.forEachIndexed { index, exercise ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = "${index + 1}.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(FeiQiSpacing.xs))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = exercise.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = "${exercise.sets}组 × " + if (exercise.durationSeconds > 0) {
-                                "${exercise.durationSeconds}秒"
-                            } else {
-                                exercise.reps
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(FeiQiSpacing.md))
-            Button(
-                onClick = onStart,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("workout_start"),
-                shape = RoundedCornerShape(FeiQiRadius.sm),
-                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = OnPrimary),
-            ) {
-                Text(text = stringResource(R.string.workout_start))
-            }
-        }
-    }
-}
 
 /** 区块小标题。 */
 @Composable

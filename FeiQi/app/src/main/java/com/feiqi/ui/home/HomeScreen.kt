@@ -286,7 +286,8 @@ fun HomeScreen(
 
     // 松手吸附：不在合法槽位时**平滑**回到最近合法槽位（即位移回零），结束后无任何残留偏移
     LaunchedEffect(settlingCard) {
-        val card = settlingCard ?: return@LaunchedEffect
+        // 只用 settlingCard 做触发 key，具体归位逻辑不依赖卡片身份
+        if (settlingCard == null) return@LaunchedEffect
         val from = renderOffset
         dragOffset = Offset.Zero // 逻辑位移已无用，先归零避免下一次拖动残留
         if (from != Offset.Zero) {
@@ -495,12 +496,12 @@ fun HomeScreen(
                 onDragEnd = {
                     // 松手后若仍有位移（未落在合法槽位），进入平滑归位动画；
                     // 动画由 LaunchedEffect(settlingCard) 负责，结束后位移必为 0
-                    val card = draggingCard
+                    val released = draggingCard
                     draggingCard = null
                     autoScrollStep = 0f
                     dragPointerRootY = 0f
                     dragOffset = Offset.Zero
-                    if (card != null) settlingCard = card else renderOffset = Offset.Zero
+                    if (released != null) settlingCard = released else renderOffset = Offset.Zero
                 }
             ) {
                 when (card) {

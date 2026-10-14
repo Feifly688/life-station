@@ -298,6 +298,7 @@ class WorkoutCatalogRepository(
                         sets = link.sets,
                         reps = link.reps,
                         durationSeconds = link.duration,
+                        restTime = link.restTime,
                         note = link.note,
                     )
                 },

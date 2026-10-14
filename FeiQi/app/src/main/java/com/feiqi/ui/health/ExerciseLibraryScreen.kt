@@ -136,7 +136,13 @@ internal fun ExerciseLibraryScreen(
             }
 
             if (filtered.exercises.isEmpty()) {
-                item { LibraryEmptyPlaceholder(hasKeyword = keyword.isNotBlank()) }
+                item {
+                    LibraryEmptyPlaceholder(
+                        hasKeyword = keyword.isNotBlank(),
+                        onClearKeyword = { viewModel.setKeyword("") },
+                        onBack = onBack,
+                    )
+                }
             } else {
                 item {
                     // 分类卡与动作网格共用同一个 filtered，计数天然一致
@@ -251,7 +257,7 @@ private fun CategoryCard(card: ExerciseCategoryCard, onClick: () -> Unit) {
             .width(96.dp)
             .clip(RoundedCornerShape(FeiQiRadius.md))
             .background(CardAmber)
-            .clickable(onClick = onClick)
+            .pressable(onClick = onClick)
             .padding(vertical = FeiQiSpacing.md, horizontal = FeiQiSpacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -320,7 +326,7 @@ internal fun ExerciseCard(
         modifier = modifier
             .clip(RoundedCornerShape(FeiQiRadius.md))
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
+            .pressable(onClick = onClick)
             .padding(FeiQiSpacing.md),
     ) {
         Box(
@@ -381,27 +387,32 @@ internal fun ExerciseCard(
     }
 }
 
+/**
+ * 空状态：搜不到动作时给出出口（清空搜索 / 退出分类），避免只留一句死文案。
+ *
+ * 两种成因用不同文案与不同按钮：
+ * - [hasKeyword]=true → 关键词无结果，按钮=清空搜索；
+ * - 否则 → 动作库本身为空（种子异常），按钮=返回。
+ */
 @Composable
-private fun LibraryEmptyPlaceholder(hasKeyword: Boolean) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 140.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "🔍", style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
-            Text(
-                text = if (hasKeyword) {
-                    stringResource(R.string.exercise_no_result)
-                } else {
-                    stringResource(R.string.exercise_library_empty)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
-    }
+private fun LibraryEmptyPlaceholder(hasKeyword: Boolean, onClearKeyword: () -> Unit, onBack: () -> Unit) {
+    WorkoutEmptyState(
+        emoji = "🔍",
+        title = if (hasKeyword) {
+            stringResource(R.string.exercise_no_result)
+        } else {
+            stringResource(R.string.exercise_library_empty)
+        },
+        description = if (hasKeyword) {
+            stringResource(R.string.exercise_no_result_desc)
+        } else {
+            stringResource(R.string.exercise_library_empty_desc)
+        },
+        actionLabel = if (hasKeyword) {
+            stringResource(R.string.exercise_search_clear_all)
+        } else {
+            stringResource(R.string.back)
+        },
+        onAction = if (hasKeyword) onClearKeyword else onBack,
+    )
 }

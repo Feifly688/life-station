@@ -9,12 +9,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.ViewModel
@@ -36,9 +42,16 @@ import com.feiqi.ui.schedule.ScheduleScreen
 import com.feiqi.ui.schedule.ScheduleViewModel
 import com.feiqi.ui.settings.SettingsScreen
 import com.feiqi.ui.settings.SettingsViewModel
+import com.feiqi.R
+import com.feiqi.ui.theme.FeiQiRadius
 import com.feiqi.ui.theme.FeiQiTheme
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        /** 五个底部 Tab 主页面：只有停留在这些页面时返回才会触发退出确认。 */
+        private val MAIN_ROUTES = setOf("home", "accounting", "schedule", "health", "media")
+    }
 
     /**
      * 语录集周更入口：**本周第一次打开 App** 时真正联网（每次新增 5~10 条，不限定周几）。
@@ -61,6 +74,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             FeiQiTheme {
                 var currentRoute by rememberSaveable { mutableStateOf("home") }
+                // 退出二次确认：仅五个主页面会弹；设置页等子页面有自己的 BackHandler 先行拦截
+                var showExitConfirm by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -144,6 +159,35 @@ class MainActivity : ComponentActivity() {
                     // 设置页是子页面：在设置路由下拦截系统返回键，回到首页而非退出 App（修复 H1）
                     if (currentRoute == "settings") {
                         BackHandler(enabled = true) { currentRoute = "home" }
+                    } else if (currentRoute in MAIN_ROUTES) {
+                        // 五个主页面：返回/边缘内滑 = 退出 App，先二次确认。
+                        // BackHandler 同时覆盖系统返回键与手势返回，两者行为一致。
+                        // ⚠️ 健康页内层（健身二级页）自己注册了 BackHandler，
+                        //    Compose 取最内层启用者，因此这里的弹窗只会在健身覆盖层全关后才会出现。
+                        BackHandler(enabled = true) { showExitConfirm = true }
+                    }
+
+                    if (showExitConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showExitConfirm = false },
+                            title = { Text(stringResource(R.string.exit_confirm_title)) },
+                            text = { Text(stringResource(R.string.exit_confirm_desc)) },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        showExitConfirm = false
+                                        finish()
+                                    }
+                                ) { Text(stringResource(R.string.exit_confirm_action)) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showExitConfirm = false }) {
+                                    Text(stringResource(R.string.exit_confirm_cancel))
+                                }
+                            },
+                            shape = RoundedCornerShape(FeiQiRadius.lg),
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        )
                     }
 
                 val workoutViewModel: com.feiqi.ui.health.WorkoutViewModel = viewModel(

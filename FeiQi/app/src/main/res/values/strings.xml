@@ -78,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.18.0</string>
+    <string name="version_value">v1.19.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -345,4 +345,53 @@
     <string name="perm_autostart_title">后台运行与自启动</string>
     <string name="perm_autostart_desc">小米/Android16 需允许自启动，省电策略设为无限制</string>
     <string name="xiaomi_tip">若通知与闹钟权限已开仍不响，多半是「自启动」被禁或「省电策略」未设无限制，点下方去设置开启。</string>
+
+    <!-- 健身 v2 阶段 4：UI 体验优化 -->
+    <string name="workout_hero_title">健身中心</string>
+    <string name="workout_hero_enter">进入 ›</string>
+    <string name="workout_hero_streak_unit">天连续训练</string>
+    <string name="workout_hero_month">本月训练</string>
+    <string name="workout_hero_total">累计训练</string>
+    <string name="workout_about_minutes">约 %1$d 分钟</string>
+    <string name="workout_exercise_unit">%1$d 个动作</string>
+    <string name="workout_more_exercises">+%1$d 个动作</string>
+    <string name="workout_health_section">健康数据</string>
+    <string name="workout_plans_section">我的训练计划</string>
+    <string name="workout_enter_section">进入健身</string>
+
+    <!-- 历史详情 -->
+    <string name="workout_history_title">训练记录</string>
+    <string name="workout_history_empty">完成第一次训练后，会显示在这里</string>
+    <string name="workout_history_empty_desc">每次完成训练都会留下记录</string>
+    <string name="workout_history_completed_at">完成于 %1$s</string>
+    <string name="workout_history_duration">训练时长</string>
+    <string name="workout_history_moves">完成动作</string>
+    <string name="workout_history_plan">训练计划</string>
+    <string name="workout_history_missing_plan">该计划的数据已不可用</string>
+    <string name="workout_history_missing_desc">计划内容读取不到，仅能展示打卡信息</string>
+    <string name="workout_history_undo_hint">记录不可撤销</string>
+
+    <!-- 动作详情底部 -->
+    <string name="workout_add_to_plan">加入训练计划</string>
+    <string name="workout_add_to_plan_soon">该功能即将支持</string>
+
+    <!-- 创建计划步骤进度指示（步骤名复用阶段 2 已有的 workout_step_*） -->
+    <string name="workout_step_indicator">第 %1$d 步 · %2$s</string>
+
+    <!-- 我的计划列表：计划内完成进度（与本月完成是两个概念） -->
+    <string name="workout_plan_progress">已完成 %1$d / %2$d 天</string>
+    <string name="workout_plan_progress_percent">%1$d%%</string>
+    <string name="workout_my_plans_empty_desc">自己安排训练部位与频率</string>
+
+    <!-- 动作库空状态 -->
+    <string name="exercise_no_result_desc">换个关键词，或清除筛选条件</string>
+    <string name="exercise_library_empty_desc">动作库还没有内容</string>
+    <string name="exercise_search_clear_all">清空搜索</string>
+
+    <!-- 退出确认 -->
+    <string name="exit_confirm_title">确认退出翡栖？</string>
+    <string name="exit_confirm_desc">再按一次退出应用</string>
+    <string name="exit_confirm_action">退出</string>
+    <string name="exit_confirm_cancel">再练会儿</string>
+
 </resources>

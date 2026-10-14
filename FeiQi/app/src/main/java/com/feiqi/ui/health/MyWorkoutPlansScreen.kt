@@ -61,6 +61,10 @@ import com.feiqi.utils.DateUtils
  *
  * 展示官方计划 + 用户自建计划；用户计划可「开始训练」切换当前训练计划。
  *
+ * ## 完成进度口径
+ * 分母是该计划自己的 [WorkoutPlanEntity.cycleDays]，与「本月完成 x / 自然月天数」是**两个独立概念**，
+ * 不共用分母、不共用口径（见 `WorkoutStats.kt` 中三条统计口径的说明）。
+ *
  * ## 本阶段不含删除
  * 级联删除会牵动 `workout_records` 的一致性（是否保留历史打卡），
  * 留到下一阶段与软删除字段（`deleted`）一并处理，见 `FITNESS_MODULE_V2_STAGE2.md`。
@@ -68,6 +72,7 @@ import com.feiqi.utils.DateUtils
 @Composable
 internal fun MyWorkoutPlansScreen(
     planViewModel: WorkoutPlanViewModel,
+    completedCountByPlan: Map<String, Int>,
     onCreatePlan: () -> Unit,
     onStartPlan: (String) -> Unit,
     onBack: () -> Unit,
@@ -102,6 +107,7 @@ internal fun MyWorkoutPlansScreen(
                     PlanCard(
                         plan = plan,
                         highlight = false,
+                        completedDays = completedCountByPlan[plan.planId] ?: 0,
                         onStart = { onStartPlan(plan.planId) },
                     )
                 }
@@ -135,6 +141,7 @@ internal fun MyWorkoutPlansScreen(
                     PlanCard(
                         plan = plan,
                         highlight = true,
+                        completedDays = completedCountByPlan[plan.planId] ?: 0,
                         onStart = { onStartPlan(plan.planId) },
                     )
                 }
@@ -201,13 +208,16 @@ private fun SectionLabel(text: String) {
 private fun PlanCard(
     plan: WorkoutPlanEntity,
     highlight: Boolean,
+    completedDays: Int,
     onStart: () -> Unit,
 ) {
+    // 打卡数可能超过周期天数（如改过周期），钳制避免进度条溢出
+    val done = completedDays.coerceIn(0, plan.cycleDays.coerceAtLeast(1))
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(FeiQiRadius.md))
-            .clickable(onClick = onStart),
+            .pressable(onClick = onStart),
         shape = RoundedCornerShape(FeiQiRadius.md),
         colors = CardDefaults.cardColors(
             containerColor = if (highlight) PrimaryContainer else CardAmber,
@@ -254,6 +264,35 @@ private fun PlanCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(modifier = Modifier.height(FeiQiSpacing.md))
+            // 计划内完成进度（分母 = 计划周期天数，与本月完成是两个概念）
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(
+                        R.string.workout_plan_progress,
+                        done,
+                        plan.cycleDays,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.width(FeiQiSpacing.sm))
+                Text(
+                    text = stringResource(
+                        R.string.workout_plan_progress_percent,
+                        (done * 100 / plan.cycleDays.coerceAtLeast(1)),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = Primary,
+                )
+            }
+            Spacer(modifier = Modifier.height(FeiQiSpacing.xs))
+            ThinProgressBar(
+                fraction = done.toFloat() / plan.cycleDays.coerceAtLeast(1).toFloat(),
+                color = Primary,
+                trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+            )
+            Spacer(modifier = Modifier.height(FeiQiSpacing.md))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -289,43 +328,11 @@ private fun GoalBadge(goal: WorkoutGoal) {
 
 @Composable
 private fun EmptyPlanPlaceholder(onCreate: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(FeiQiRadius.md),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 160.dp)
-                .padding(FeiQiSpacing.lg),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = "🏋️",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Spacer(modifier = Modifier.height(FeiQiSpacing.sm))
-            Text(
-                text = stringResource(R.string.workout_my_plans_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(FeiQiSpacing.md))
-            Button(
-                onClick = onCreate,
-                shape = RoundedCornerShape(FeiQiRadius.sm),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Primary,
-                    contentColor = OnPrimary,
-                ),
-            ) {
-                Text(text = stringResource(R.string.workout_create_first_plan))
-            }
-        }
-    }
+    WorkoutEmptyState(
+        emoji = "📋",
+        title = stringResource(R.string.workout_my_plans_empty),
+        description = stringResource(R.string.workout_my_plans_empty_desc),
+        actionLabel = stringResource(R.string.workout_create_first_plan),
+        onAction = onCreate,
+    )
 }

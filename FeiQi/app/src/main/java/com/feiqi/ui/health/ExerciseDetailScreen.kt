@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,12 +18,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import com.feiqi.R
 import com.feiqi.data.entity.ExerciseEntity
 import com.feiqi.data.model.BodyCategory
@@ -48,7 +57,10 @@ import com.feiqi.ui.theme.Secondary
 /**
  * 动作详情页（整页覆盖）。
  *
- * 结构：返回 + 大图占位 → 动作名 + 大类 → 信息卡（目标/难度/器械）→ 介绍 → 步骤 → 注意事项。
+ * 结构：返回 + 大图占位 → 动作名 + 大类 → 信息卡（目标/难度/器械）→ 介绍 → 步骤 → 注意事项 → 底部固定「加入训练计划」。
+ *
+ * 底部按钮本阶段只弹提示（`workout_add_to_plan_soon`），**不写入任何计划数据**；
+ * 将来真正实现「加入计划」时此处才改为携带 `exerciseId` 的写入流程。
  */
 @Composable
 internal fun ExerciseDetailScreen(
@@ -58,6 +70,9 @@ internal fun ExerciseDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val exercise by viewModel.exerciseById(exerciseId).collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val soonMessage = stringResource(R.string.workout_add_to_plan_soon)
 
     Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val current = exercise
@@ -88,9 +103,19 @@ internal fun ExerciseDetailScreen(
             return@Box
         }
 
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            bottomBar = {
+                AddToPlanBar(
+                    onClick = { scope.launch { snackbarHostState.showSnackbar(soonMessage) } },
+                )
+            },
+        ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = FeiQiSpacing.lg),
         ) {
@@ -154,7 +179,43 @@ internal fun ExerciseDetailScreen(
                 TipsCard(text = current.tips)
             }
 
-            Spacer(modifier = Modifier.height(FeiQiSpacing.xl))
+            Spacer(modifier = Modifier.height(FeiQiSpacing.lg))
+        }
+        }
+    }
+}
+
+/**
+ * 底部固定「加入训练计划」条。
+ *
+ * 视觉上带一层顶部暖调渐隐，滚动到底时不会像内容被硬切断。
+ */
+@Composable
+private fun AddToPlanBar(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.background.copy(alpha = 0f),
+                        MaterialTheme.colorScheme.background,
+                    )
+                )
+            )
+            .navigationBarsPadding()
+            .padding(horizontal = FeiQiSpacing.lg, vertical = FeiQiSpacing.md),
+    ) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(FeiQiRadius.md),
+            colors = ButtonDefaults.buttonColors(containerColor = Primary),
+        ) {
+            Text(
+                text = stringResource(R.string.workout_add_to_plan),
+                style = MaterialTheme.typography.titleSmall,
+            )
         }
     }
 }

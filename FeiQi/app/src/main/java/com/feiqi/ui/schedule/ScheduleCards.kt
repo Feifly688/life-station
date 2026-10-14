@@ -155,7 +155,6 @@ internal fun ScheduleListItemCard(
             onToggleItem = onToggleItem,
             onToggleWholeGroup = { completed -> onToggleWholeGroup(item.listId, completed) },
             onLongPressGroup = { onEnterSelection(item) },
-            onLongPressItem = { schedule -> onLongPress(EditTarget.Item(schedule)) },
             onSelect = { onToggleSelection(item) },
             onDeleteList = onDeleteList,
             modifier = modifier
@@ -179,7 +178,6 @@ internal fun SingleScheduleCard(
     // 未完成 → 「已过应完成时刻」即在待办区标红（当天过了提醒时间也标，但**不移区**）；
     // 已完成 → 只看「过期后补完成」标记：补打卡不会抹掉标签，按时完成也不会被误标过期。
     val uncompletedPastDue = !schedule.completed && schedule.isPastDue(today)
-    val showOverdue = if (schedule.completed) schedule.completedLate else uncompletedPastDue
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -302,7 +300,6 @@ internal fun ScheduleGroupCard(
     onToggleItem: (Schedule) -> Unit,
     onToggleWholeGroup: (Boolean) -> Unit,
     onLongPressGroup: () -> Unit,
-    onLongPressItem: (Schedule) -> Unit,
     onSelect: () -> Unit,
     onDeleteList: (String) -> Unit,
     modifier: Modifier = Modifier

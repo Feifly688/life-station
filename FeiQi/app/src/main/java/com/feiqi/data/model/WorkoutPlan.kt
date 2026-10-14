@@ -23,6 +23,8 @@ data class Exercise(
     val reps: String,
     /** 时长动作的秒数（如平板支撑 45 秒）；非计时动作为 0。 */
     val durationSeconds: Int = 0,
+    /** 组间休息（秒）。v2 阶段 4 新增：累计训练时长估算需要它。 */
+    val restTime: Int = DEFAULT_REST_SECONDS,
     /** 动作提示/替代动作。 */
     val note: String = "",
 )
@@ -146,7 +148,11 @@ fun computeWorkoutProgress(
 }
 
 /**
- * 连续训练天数（纯函数）。
+ * 连续训练天数（**计划内天序号口径**，纯函数）。
+ *
+ * ⚠️ 与 `computeCalendarStreak`（真实日历连续）**语义不同**，两者不可互换：
+ * 这里的 `completedDays` 是计划内的第几天（1..30），不是日期，
+ * 因此跳打 / 换计划后结果不代表真实日历连续。**只服务进度卡**。
  *
  * 规则：从今天（或昨天）往前数连续已完成的天数；今天还没练但昨天练了，
  * 连续记录**保留**（当天补练不影响连续），否则归零。

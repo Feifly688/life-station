@@ -228,7 +228,7 @@ internal fun ListEditDialog(
         val validItems = itemStates
             .filter { it.id !in deletedIds }
             .filter { it.title.trim().isNotEmpty() }
-            .mapIndexed { index, state ->
+            .map { state ->
                 EditListItem(
                     id = state.id,
                     title = state.title.trim(),
