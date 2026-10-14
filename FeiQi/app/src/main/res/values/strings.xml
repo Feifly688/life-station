@@ -78,7 +78,7 @@
     <string name="habit_reminder">习惯打卡提醒</string>
     <string name="about">关于翡栖</string>
     <string name="version">版本</string>
-    <string name="version_value">v1.16.0</string>
+    <string name="version_value">v1.17.0</string>
     <string name="storage_location">数据存储在本机，备份文件位于 Download/FeiQiFile。</string>
     <string name="privacy_tip">备份仅保存在你的设备上，不会上传到任何服务器。</string>
 
@@ -173,6 +173,50 @@
     <string name="workout_finish_disabled">完成全部动作后可打卡</string>
     <string name="workout_checked">今日已打卡</string>
     <string name="workout_celebrate">打卡完成，今天也做到了！</string>
+
+    <!-- 健身 v2 阶段 2：我的训练计划 -->
+    <string name="workout_my_plans">我的计划</string>
+    <string name="workout_my_plans_title">训练计划</string>
+    <string name="workout_official_plans">官方计划</string>
+    <string name="workout_my_plans_empty">还没有自己的训练计划\n按你的目标与频率定制一个吧</string>
+    <string name="workout_create_plan">创建计划</string>
+    <string name="workout_create_first_plan">创建你的第一个训练计划</string>
+    <string name="workout_plan_start">开始训练</string>
+    <string name="workout_plan_meta">%1$d 天 · %2$s</string>
+    <string name="workout_plan_created">创建于 %1$s</string>
+
+    <!-- 创建向导 -->
+    <string name="workout_step_basic">基础信息</string>
+    <string name="workout_step_cycle">训练周期</string>
+    <string name="workout_step_frequency">训练频率</string>
+    <string name="workout_step_days">训练日设置</string>
+    <string name="workout_step_next">下一步</string>
+    <string name="workout_step_prev">上一步</string>
+    <string name="workout_step_save">完成计划</string>
+
+    <string name="workout_create_name_label">给计划起个名字</string>
+    <string name="workout_create_name_hint">最多 20 个字，方便自己辨认</string>
+    <string name="workout_create_name_placeholder">例如：7 天胸肩循环</string>
+    <string name="workout_create_goal_label">训练目标</string>
+
+    <string name="workout_create_cycle_label">训练周期</string>
+    <string name="workout_create_cycle_hint">计划的总天数，决定进度条的完整长度</string>
+    <string name="workout_create_custom_cycle">自定义天数</string>
+    <string name="workout_unit_day">天</string>
+    <string name="workout_unit_per_week">天/周</string>
+
+    <string name="workout_create_frequency_label">每周训练频率</string>
+    <string name="workout_create_frequency_hint">频率越高，训练日越密集；剩余天数自动安排为休息</string>
+    <string name="workout_create_preview">一周排布预览</string>
+    <string name="workout_mark_train">练</string>
+    <string name="workout_mark_rest">休</string>
+    <string name="workout_create_preview_summary">全周期共 %1$d 个训练日，约每周 %2$d 天（首周 %3$d 天）</string>
+
+    <string name="workout_create_days_label">选择训练部位</string>
+    <string name="workout_create_days_hint">可多选，系统会按周期与频率自动把部位轮转分配到训练日</string>
+    <string name="workout_create_summary_title">计划概览</string>
+    <string name="workout_create_summary_days">周期 %1$d 天，其中 %2$d 天训练</string>
+    <string name="workout_create_summary_empty">尚未选择训练部位</string>
     <string name="health_empty_title">还没有体重记录</string>
     <string name="health_empty_desc">记录今天的体重，开始关注身体变化。</string>
     <string name="record_weight_today">今日体重</string>

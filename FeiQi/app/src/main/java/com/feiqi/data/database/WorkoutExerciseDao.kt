@@ -28,4 +28,8 @@ interface WorkoutExerciseDao {
 
     @Query("DELETE FROM workout_exercises WHERE dayId = :dayId")
     suspend fun deleteByDay(dayId: Long)
+
+    /** 删除计划时级联清理多天的关联。 */
+    @Query("DELETE FROM workout_exercises WHERE dayId IN (:dayIds)")
+    suspend fun deleteByDayIds(dayIds: List<Long>)
 }

@@ -123,16 +123,25 @@ data class WorkoutProgress(
     val percent: Float,
 )
 
-/** 完成度进度（纯函数，便于单测）。 */
-fun computeWorkoutProgress(completedDays: Set<Int>): WorkoutProgress {
-    val clamped = completedDays.filter { it in 1..WORKOUT_TOTAL_DAYS }.toSet()
+/**
+ * 完成度进度（纯函数，便于单测）。
+ *
+ * @param completedDays 已完成打卡的天数
+ * @param totalDays 计划总天数（官方 30 天；用户自建计划为自己的周期）
+ */
+fun computeWorkoutProgress(
+    completedDays: Set<Int>,
+    totalDays: Int = WORKOUT_TOTAL_DAYS,
+): WorkoutProgress {
+    val days = totalDays.coerceAtLeast(1)
+    val clamped = completedDays.filter { it in 1..days }.toSet()
     val completed = clamped.size
     // 当前训练天数：第一个未完成的天；全部完成则停在最后一天
-    val current = (1..WORKOUT_TOTAL_DAYS).firstOrNull { it !in clamped } ?: WORKOUT_TOTAL_DAYS
+    val current = (1..days).firstOrNull { it !in clamped } ?: days
     return WorkoutProgress(
         currentDay = current,
         completedCount = completed,
-        percent = completed * 100f / WORKOUT_TOTAL_DAYS,
+        percent = completed * 100f / days,
     )
 }
 
@@ -142,9 +151,10 @@ fun computeWorkoutProgress(completedDays: Set<Int>): WorkoutProgress {
  * 规则：从今天（或昨天）往前数连续已完成的天数；今天还没练但昨天练了，
  * 连续记录**保留**（当天补练不影响连续），否则归零。
  */
-fun computeStreak(completedDays: Set<Int>, today: Int): Int {
+fun computeStreak(completedDays: Set<Int>, today: Int, totalDays: Int = WORKOUT_TOTAL_DAYS): Int {
     if (completedDays.isEmpty()) return 0
-    val clamped = completedDays.filter { it in 1..WORKOUT_TOTAL_DAYS }.toSet()
+    val days = totalDays.coerceAtLeast(1)
+    val clamped = completedDays.filter { it in 1..days }.toSet()
     var cursor = when {
         today in clamped -> today
         today - 1 in clamped -> today - 1

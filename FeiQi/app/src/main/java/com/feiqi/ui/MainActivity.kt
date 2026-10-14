@@ -147,7 +147,16 @@ class MainActivity : ComponentActivity() {
                     }
 
                 val workoutViewModel: com.feiqi.ui.health.WorkoutViewModel = viewModel(
-                    factory = com.feiqi.ui.health.WorkoutViewModel.factory(container.workoutRepository)
+                    factory = com.feiqi.ui.health.WorkoutViewModel.factory(
+                        container.workoutRepository,
+                        container.workoutCatalogRepository,
+                    )
+                )
+
+                val workoutPlanViewModel: com.feiqi.ui.health.WorkoutPlanViewModel = viewModel(
+                    factory = com.feiqi.ui.health.WorkoutPlanViewModel.factory(
+                        container.workoutCatalogRepository
+                    )
                 )
 
                     // 全部 Tab 常驻组合树，仅按当前路由切换显隐（fillMaxSize / size(0.dp)），
@@ -181,6 +190,7 @@ class MainActivity : ComponentActivity() {
                             HealthScreen(
                                 viewModel = healthViewModel,
                                 workoutViewModel = workoutViewModel,
+                                workoutPlanViewModel = workoutPlanViewModel,
                                 modifier = baseModifier
                             )
                         }

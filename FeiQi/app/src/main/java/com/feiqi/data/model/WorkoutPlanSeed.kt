@@ -30,6 +30,23 @@ object WorkoutPlanSeed {
      */
     const val LEGACY_PLAN_ID: String = "home30"
 
+    /**
+     * 打卡读取时的**planId 别名表**。
+     *
+     * ## 为什么需要
+     * v2 之前所有打卡记录写入的是 [LEGACY_PLAN_ID]（`home30`），
+     * v2 的官方计划 id 却是 [OFFICIAL_PLAN_ID]（`home_beginner_30`）。
+     * 若直接按新 id 查询，老用户的 30 天进度会**全部清零**（数据回归）。
+     *
+     * ## 处理原则（v2 阶段 2 定稿）
+     * - **不改历史记录、不做数据迁移**；
+     * - 仅在 **Repository 读取层**做别名展开，多个 id 的记录**合并计算**；
+     * - UI 层统一以当前展示的计划 id 为准，不感知别名。
+     */
+    fun readAliases(planId: String): List<String> =
+        if (planId == OFFICIAL_PLAN_ID) listOf(OFFICIAL_PLAN_ID, LEGACY_PLAN_ID)
+        else listOf(planId)
+
     /** 默认组间休息（秒）。 */
     const val DEFAULT_REST_SECONDS: Int = 90
 
@@ -132,8 +149,8 @@ object WorkoutPlanSeed {
         val exerciseIds = exercises.associate { it.name to it.id }
         WORKOUT_PLANS.forEach { source ->
             val dayId = source.dayNumber.toLong()
-            source.exercises.forEach { ex ->
-                val exerciseId = exerciseIds[ex.name] ?: return@forEach
+            source.exercises.forEach exLoop@{ ex ->
+                val exerciseId = exerciseIds[ex.name] ?: return@exLoop
                 add(
                     WorkoutExerciseEntity(
                         id = linkId++,

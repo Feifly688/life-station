@@ -77,6 +77,7 @@ import java.time.LocalDate
 fun HealthScreen(
     viewModel: HealthViewModel,
     workoutViewModel: WorkoutViewModel,
+    workoutPlanViewModel: WorkoutPlanViewModel,
     modifier: Modifier = Modifier
 ) {
     val records by viewModel.records.collectAsStateWithLifecycle()
@@ -90,7 +91,8 @@ fun HealthScreen(
     val workoutStreak by workoutViewModel.streak.collectAsStateWithLifecycle()
     val workoutSummary = "Day ${workoutProgress.currentDay}/30 · 已完成 ${workoutProgress.completedCount} 次" +
         if (workoutStreak > 0) " · 连续 $workoutStreak 天" else ""
-    var workoutHomeVisible by remember { mutableStateOf(false) }
+    // 健身：单一覆盖层状态机（首页/ 我的计划 / 创建计划 / 训练详情），避免多布尔互相牵制
+    var workoutOverlay by remember { mutableStateOf(WorkoutOverlay.None) }
     var workoutDetailPlan by remember { mutableStateOf<com.feiqi.data.model.WorkoutPlan?>(null) }
 
     LaunchedEffect(Unit) {
@@ -115,7 +117,7 @@ fun HealthScreen(
 
             WorkoutEntryCard(
                 summary = workoutSummary,
-                onClick = { workoutHomeVisible = true },
+                onClick = { workoutOverlay = WorkoutOverlay.Home },
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -194,16 +196,40 @@ fun HealthScreen(
         )
     }
 
-    // 健身主页（二级页，整页覆盖）
-    if (workoutHomeVisible && workoutDetailPlan == null) {
-        WorkoutScreen(
+    // 健身二级页：按覆盖层状态渲染（详情页盖在主页之上）
+    when (workoutOverlay) {
+        WorkoutOverlay.None -> Unit
+
+        WorkoutOverlay.Home -> WorkoutScreen(
             viewModel = workoutViewModel,
+            planViewModel = workoutPlanViewModel,
             onStartTraining = { plan -> workoutDetailPlan = plan },
-            onBack = { workoutHomeVisible = false },
+            onOpenMyPlans = { workoutOverlay = WorkoutOverlay.MyPlans },
+            onBack = { workoutOverlay = WorkoutOverlay.None },
+        )
+
+        WorkoutOverlay.MyPlans -> MyWorkoutPlansScreen(
+            planViewModel = workoutPlanViewModel,
+            onCreatePlan = { workoutOverlay = WorkoutOverlay.Create },
+            onStartPlan = { planId ->
+                workoutViewModel.selectPlan(planId)
+                workoutOverlay = WorkoutOverlay.Home
+            },
+            onBack = { workoutOverlay = WorkoutOverlay.Home },
+        )
+
+        WorkoutOverlay.Create -> CreateWorkoutPlanScreen(
+            viewModel = workoutPlanViewModel,
+            onSaved = { planId ->
+                // 新建后自动切到该计划，用户立刻能看到「今日训练」
+                workoutViewModel.selectPlan(planId)
+                workoutOverlay = WorkoutOverlay.Home
+            },
+            onBack = { workoutOverlay = WorkoutOverlay.MyPlans },
         )
     }
 
-    // 训练详情（二级页，盖在健身主页之上）
+    // 训练详情（最上层）
     workoutDetailPlan?.let { plan ->
         val completedDays by workoutViewModel.completedDays.collectAsStateWithLifecycle()
         WorkoutDetailScreen(
@@ -217,6 +243,25 @@ fun HealthScreen(
     toastMessage?.let { message ->
         HealthToast(message = message, onDismiss = { toastMessage = null })
     }
+}
+
+/**
+ * 健身模块的覆盖层状态（健康页内的二级页整页覆盖）。
+ *
+ * 用单一枚举替代多个布尔量，避免出现"主页可见但详情也在"之类的矛盾态。
+ */
+internal enum class WorkoutOverlay {
+    /** 不显示任何健身二级页。 */
+    None,
+
+    /** 健身主页。 */
+    Home,
+
+    /** 我的训练计划列表。 */
+    MyPlans,
+
+    /** 创建训练计划向导。 */
+    Create,
 }
 
 @Composable

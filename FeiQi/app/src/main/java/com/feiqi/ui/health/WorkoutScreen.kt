@@ -2,6 +2,7 @@ package com.feiqi.ui.health
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -57,17 +59,24 @@ import com.feiqi.utils.DateUtils
 @Composable
 internal fun WorkoutScreen(
     viewModel: WorkoutViewModel,
+    planViewModel: WorkoutPlanViewModel,
     onStartTraining: (WorkoutPlan) -> Unit,
+    onOpenMyPlans: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val progress by viewModel.progress.collectAsStateWithLifecycle()
     val streak by viewModel.streak.collectAsStateWithLifecycle()
     val completedDays by viewModel.completedDayList.collectAsStateWithLifecycle()
+    val runtimePlan by viewModel.runtimePlan.collectAsStateWithLifecycle()
+    val totalDays by viewModel.totalDays.collectAsStateWithLifecycle()
+    val activePlanId by viewModel.activePlanId.collectAsStateWithLifecycle()
+    val allPlans by planViewModel.plans.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    val todayPlan = remember(progress.currentDay) {
-        WORKOUT_PLANS.firstOrNull { it.dayNumber == progress.currentDay } ?: WORKOUT_PLANS.last()
+    // 进度只认当前计划的打卡记录；换计划时 completedDays 会整体切换，避免串号
+    val todayPlan = remember(runtimePlan, progress.currentDay) {
+        runtimePlan.firstOrNull { it.dayNumber == progress.currentDay } ?: runtimePlan.lastOrNull()
     }
 
     LaunchedEffect(Unit) {
@@ -84,26 +93,37 @@ internal fun WorkoutScreen(
             Spacer(modifier = Modifier.height(FeiQiSpacing.md))
             HeaderRow(onBack = onBack)
 
+            PlanSwitcherRow(
+                plans = allPlans,
+                activePlanId = activePlanId,
+                onSelect = viewModel::selectPlan,
+                onOpenMyPlans = onOpenMyPlans,
+                modifier = Modifier.padding(top = FeiQiSpacing.md),
+            )
+
             WorkoutProgressCard(
                 currentDay = progress.currentDay,
                 completedCount = progress.completedCount,
-                totalDays = WORKOUT_PLANS.size,
+                totalDays = totalDays,
                 percent = progress.percent,
                 streak = streak,
                 modifier = Modifier.padding(top = FeiQiSpacing.md),
             )
 
-            TodayPlanCard(
-                plan = todayPlan,
-                onStart = { onStartTraining(todayPlan) },
-                modifier = Modifier.padding(top = FeiQiSpacing.lg),
-            )
+            if (todayPlan != null) {
+                TodayPlanCard(
+                    plan = todayPlan,
+                    onStart = { onStartTraining(todayPlan) },
+                    modifier = Modifier.padding(top = FeiQiSpacing.lg),
+                )
+            }
 
             SectionTitle(
                 title = stringResource(R.string.workout_history),
                 modifier = Modifier.padding(top = FeiQiSpacing.lg),
             )
             DayHistoryGrid(
+                totalDays = totalDays,
                 completedDays = completedDays,
                 onDayClick = { day ->
                     if (day in completedDays) viewModel.undo(day)
@@ -115,6 +135,58 @@ internal fun WorkoutScreen(
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+}
+
+/**
+ * 当前计划切换条：横向滚动的计划名 + 「我的计划 ›」入口。
+ *
+ * 官方计划与用户自建计划都可直接切换，切换后进度 / 今日训练 / 历史全部跟随。
+ */
+@Composable
+private fun PlanSwitcherRow(
+    plans: List<com.feiqi.data.entity.WorkoutPlanEntity>,
+    activePlanId: String,
+    onSelect: (String) -> Unit,
+    onOpenMyPlans: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.sm),
+        ) {
+            plans.forEach { plan ->
+                val active = plan.planId == activePlanId
+                Text(
+                    text = plan.name,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (active) OnPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(FeiQiRadius.sm))
+                        .background(if (active) Primary else MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { onSelect(plan.planId) }
+                        .padding(horizontal = FeiQiSpacing.md, vertical = FeiQiSpacing.sm),
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(FeiQiSpacing.xs))
+        Text(
+            text = stringResource(R.string.workout_my_plans) + " ›",
+            style = MaterialTheme.typography.labelLarge,
+            color = Primary,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(FeiQiRadius.sm))
+                .clickable(onClick = onOpenMyPlans)
+                .padding(horizontal = FeiQiSpacing.sm, vertical = FeiQiSpacing.sm),
         )
     }
 }
@@ -229,29 +301,31 @@ private fun SectionTitle(title: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** 历史记录：30 天打勾网格。 */
+/** 历史记录：按当前计划总天数分行的打勾网格。 */
 @Composable
 private fun DayHistoryGrid(
+    totalDays: Int,
     completedDays: List<Int>,
     onDayClick: (Int) -> Unit,
 ) {
     val done = completedDays.toSet()
+    val days = remember(totalDays) { (1..totalDays.coerceAtLeast(0)).toList() }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = FeiQiSpacing.sm),
         verticalArrangement = Arrangement.spacedBy(FeiQiSpacing.sm),
     ) {
-        WORKOUT_PLANS.chunked(5).forEach { week ->
+        days.chunked(5).forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(FeiQiSpacing.sm),
             ) {
-                week.forEach { plan ->
+                week.forEach { day ->
                     DayHistoryChip(
-                        dayNumber = plan.dayNumber,
-                        done = plan.dayNumber in done,
-                        onClick = { onDayClick(plan.dayNumber) },
+                        dayNumber = day,
+                        done = day in done,
+                        onClick = { onDayClick(day) },
                     )
                 }
             }
